@@ -221,6 +221,37 @@
             font-size: 0.84rem;
         }
 
+        details.point-creator {
+            border: 1px dashed #cabca9;
+            border-radius: 10px;
+            background: #fffefb;
+            margin-bottom: 14px;
+        }
+
+        details.point-creator > summary {
+            padding: 10px 12px;
+            background: transparent;
+            justify-content: flex-start;
+            gap: 10px;
+        }
+
+        .creator-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #314447;
+        }
+
+        .creator-body {
+            padding: 10px 12px 12px;
+            border-top: 1px dashed #d9cab8;
+        }
+
+        .creator-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
         button {
             border: 0;
             border-radius: 10px;
@@ -253,6 +284,7 @@
 
         @media (max-width: 920px) {
             .meta-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+            .creator-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
             .actions { flex-direction: column; align-items: stretch; }
             button { width: 100%; }
         }
@@ -279,7 +311,7 @@
 
     <section class="section-list">
         @forelse ($sections as $section)
-            <details class="section" @if($loop->first) open @endif>
+            <details class="section">
                 <summary>
                     <div>
                         <p class="section-title">{{ $section->name }}</p>
@@ -289,6 +321,79 @@
                 </summary>
 
                 <div class="section-body">
+                    <details class="point-creator">
+                        <summary>
+                            <span class="badge">Demo</span>
+                            <span class="creator-title">Definisci nuovo campionamento (punto dinamico)</span>
+                        </summary>
+                        <div class="creator-body">
+                            <form action="{{ route('monitoraggi.points.store', $section) }}" method="POST">
+                                @csrf
+                                <div class="creator-grid">
+                                    <div class="field">
+                                        <label for="new_legacy_{{ $section->id }}">ID legacy (opzionale)</label>
+                                        <input id="new_legacy_{{ $section->id }}" type="text" name="legacy_code" maxlength="50" placeholder="es. 999">
+                                    </div>
+                                    <div class="field" style="grid-column: span 2;">
+                                        <label for="new_title_{{ $section->id }}">Descrizione punto</label>
+                                        <input id="new_title_{{ $section->id }}" type="text" name="title" maxlength="255" required placeholder="Nuovo punto campionamento demo">
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_area_{{ $section->id }}">Area/Reparto</label>
+                                        <input id="new_area_{{ $section->id }}" type="text" name="area_label" maxlength="255" placeholder="es. Reparto test">
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_kind_{{ $section->id }}">Tipo campionamento</label>
+                                        <select id="new_kind_{{ $section->id }}" name="sample_kind">
+                                            <option value="air_active">Aria attiva</option>
+                                            <option value="surface_contact">Superficie contact plate</option>
+                                            <option value="surface_swab">Superficie swab</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_volume_{{ $section->id }}">Volume standard (L)</label>
+                                        <input id="new_volume_{{ $section->id }}" type="number" min="0" name="default_volume_liters" placeholder="1000">
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_op_{{ $section->id }}">Richiede stato operativo</label>
+                                        <select id="new_op_{{ $section->id }}" name="requires_operational_status">
+                                            <option value="1" selected>Si</option>
+                                            <option value="0">No</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_lot_{{ $section->id }}">Richiede lotto prodotto</label>
+                                        <select id="new_lot_{{ $section->id }}" name="requires_product_lot">
+                                            <option value="1" selected>Si</option>
+                                            <option value="0">No</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_pos_{{ $section->id }}">Posizione</label>
+                                        <select id="new_pos_{{ $section->id }}" name="insert_position">
+                                            <option value="end" selected>In fondo</option>
+                                            <option value="before">Prima del punto selezionato</option>
+                                            <option value="after">Dopo il punto selezionato</option>
+                                        </select>
+                                    </div>
+                                    <div class="field" style="grid-column: span 2;">
+                                        <label for="new_anchor_{{ $section->id }}">Punto di riferimento (per prima/dopo)</label>
+                                        <select id="new_anchor_{{ $section->id }}" name="anchor_point_id">
+                                            <option value="">Nessuno (usa in fondo)</option>
+                                            @foreach ($section->samplingPoints as $point)
+                                                <option value="{{ $point->id }}">{{ $point->legacy_code ?: '-' }} - {{ $point->title }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="actions" style="margin-top:10px;">
+                                    <p class="hint">Questo bottone e solo demo: crea un nuovo punto campionamento direttamente da interfaccia.</p>
+                                    <button type="submit">Aggiungi nuovo campionamento</button>
+                                </div>
+                            </form>
+                        </div>
+                    </details>
+
                     <form action="{{ route('monitoraggi.checks.store', $section) }}" method="POST">
                         @csrf
 

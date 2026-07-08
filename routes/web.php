@@ -17,3 +17,5 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [MonitoringController::class, 'index'])->name('monitoraggi.index');
 Route::post('/monitoraggi/{section}/checks', [MonitoringController::class, 'store'])
     ->name('monitoraggi.checks.store');
+Route::post('/monitoraggi/{section}/points', [MonitoringController::class, 'storePoint'])
+    ->name('monitoraggi.points.store');
