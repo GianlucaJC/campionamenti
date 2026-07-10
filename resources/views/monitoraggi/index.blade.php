@@ -58,6 +58,47 @@
             line-height: 1.4;
         }
 
+        .hero-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .user-tools {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .user-pill {
+            border: 1px solid #d9c7b0;
+            color: #6f5b44;
+            background: #f8f1e7;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 5px 10px;
+            white-space: nowrap;
+        }
+
+        .logout-btn {
+            border: 1px solid #b65d29;
+            color: #fff;
+            background: linear-gradient(120deg, #cd6b31, #b8571f);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            filter: brightness(1.06);
+        }
+
         .status {
             margin-top: 14px;
             color: var(--ok);
@@ -122,6 +163,12 @@
             padding: 4px 10px;
             white-space: nowrap;
             background: #f2fbfa;
+        }
+
+        .badge.soft {
+            border-color: #d9c7b0;
+            color: #6f5b44;
+            background: #f8f1e7;
         }
 
         .section-body {
@@ -228,6 +275,20 @@
             margin-bottom: 14px;
         }
 
+        details.department-manager {
+            border: 1px dashed #c5d2c4;
+            border-radius: 10px;
+            background: #f9fdf8;
+            margin-bottom: 14px;
+        }
+
+        details.department-manager > summary {
+            padding: 10px 12px;
+            background: transparent;
+            justify-content: flex-start;
+            gap: 10px;
+        }
+
         details.point-creator > summary {
             padding: 10px 12px;
             background: transparent;
@@ -246,10 +307,78 @@
             border-top: 1px dashed #d9cab8;
         }
 
+        .department-body {
+            padding: 10px 12px 12px;
+            border-top: 1px dashed #c5d2c4;
+        }
+
         .creator-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(140px, 1fr));
             gap: 10px;
+        }
+
+        .department-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .department-table {
+            margin-top: 10px;
+            border: 1px solid #dbe6d8;
+            border-radius: 10px;
+            background: #fff;
+            overflow: clip;
+        }
+
+        .department-row {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 0.8fr auto auto auto;
+            gap: 10px;
+            padding: 10px;
+            border-bottom: 1px solid #edf4eb;
+            align-items: end;
+        }
+
+        .department-move {
+            display: flex;
+            gap: 6px;
+        }
+
+        .danger-btn {
+            border: 1px solid #a73f33;
+            background: #c64a3d;
+            color: #fff;
+        }
+
+        .soft-btn {
+            border: 1px solid #9e8a71;
+            background: #f4ecdf;
+            color: #5b4c3a;
+        }
+
+        .btn-small {
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            min-width: 44px;
+        }
+
+        .department-row:last-child {
+            border-bottom: 0;
+        }
+
+        .department-row .field {
+            margin: 0;
+        }
+
+        .group-row td {
+            background: #eef7ef;
+            font-weight: 700;
+            color: #25452c;
+            border-top: 1px solid #d4e8d6;
+            border-bottom: 1px solid #d4e8d6;
         }
 
         button {
@@ -285,6 +414,8 @@
         @media (max-width: 920px) {
             .meta-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
             .creator-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+            .department-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+            .department-row { grid-template-columns: 1fr; align-items: stretch; }
             .actions { flex-direction: column; align-items: stretch; }
             button { width: 100%; }
         }
@@ -293,7 +424,18 @@
 <body>
 <div class="wrap">
     <header class="hero">
-        <h1>Controlli microbiologici dinamici</h1>
+        <div class="hero-top">
+            <h1>Controlli microbiologici dinamici</h1>
+            <div class="user-tools">
+                @if (auth()->check())
+                    <span class="user-pill">{{ auth()->user()->name }} ({{ auth()->user()->role }})</span>
+                    <form action="{{ route('logout') }}" method="POST" style="margin:0;">
+                        @csrf
+                        <button class="logout-btn" type="submit">Logout</button>
+                    </form>
+                @endif
+            </div>
+        </div>
         <p>
             Le sezioni e i punti di campionamento arrivano da database.
             Per aggiungere o riordinare i punti (anche prima/dopo altri), basta aggiornare le tabelle
@@ -310,20 +452,130 @@
     </header>
 
     <section class="section-list">
+        @if (auth()->user()?->isAdmin())
+            <details class="section" open>
+                <summary>
+                    <div>
+                        <p class="section-title">Gestione reparti per sezione</p>
+                        <p class="section-desc">Configurazione centralizzata reparti per tutte le sezioni.</p>
+                    </div>
+                    <span class="badge soft">Admin</span>
+                </summary>
+
+                <div class="section-body">
+                    @foreach ($sections as $section)
+                        <details class="department-manager">
+                            <summary>
+                                <span class="creator-title">{{ $section->name }}</span>
+                            </summary>
+                            <div class="department-body">
+                                <form action="{{ route('monitoraggi.departments.store', $section) }}" method="POST">
+                                    @csrf
+                                    <div class="department-grid">
+                                        <div class="field">
+                                            <label for="new_department_name_global_{{ $section->id }}">Nome reparto</label>
+                                            <input id="new_department_name_global_{{ $section->id }}" type="text" name="name" maxlength="120" required placeholder="es. Laminar flow">
+                                        </div>
+                                        <div class="field">
+                                            <label for="new_department_code_global_{{ $section->id }}">Codice reparto (opzionale)</label>
+                                            <input id="new_department_code_global_{{ $section->id }}" type="text" name="code" maxlength="50" placeholder="es. laminar">
+                                        </div>
+                                    </div>
+                                    <div class="actions" style="margin-top:10px;">
+                                        <p class="hint">I reparti sono specifici della sezione corrente e non vengono condivisi automaticamente tra sezioni diverse.</p>
+                                        <button type="submit">Aggiungi reparto</button>
+                                    </div>
+                                </form>
+
+                                <div class="department-table">
+                                    @forelse ($section->departments as $department)
+                                        <form class="department-row" action="{{ route('monitoraggi.departments.update', [$section, $department]) }}" method="POST">
+                                            @csrf
+                                            @method('PATCH')
+
+                                            <div class="field">
+                                                <label for="department_name_global_{{ $section->id }}_{{ $department->id }}">Nome reparto</label>
+                                                <input id="department_name_global_{{ $section->id }}_{{ $department->id }}" type="text" name="name" maxlength="120" value="{{ $department->name }}" required>
+                                            </div>
+
+                                            <div class="field">
+                                                <label for="department_code_global_{{ $section->id }}_{{ $department->id }}">Codice</label>
+                                                <input id="department_code_global_{{ $section->id }}_{{ $department->id }}" type="text" name="code" maxlength="50" value="{{ $department->code }}">
+                                            </div>
+
+                                            <div class="field">
+                                                <label for="department_active_global_{{ $section->id }}_{{ $department->id }}">Attivo</label>
+                                                <select id="department_active_global_{{ $section->id }}_{{ $department->id }}" name="is_active">
+                                                    <option value="1" @selected($department->is_active)>Si</option>
+                                                    <option value="0" @selected(! $department->is_active)>No</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="department-move">
+                                                <button
+                                                    type="submit"
+                                                    class="btn-small"
+                                                    title="Sposta su"
+                                                    name="direction"
+                                                    value="up"
+                                                    formaction="{{ route('monitoraggi.departments.move', [$section, $department]) }}"
+                                                >↑</button>
+                                                <button
+                                                    type="submit"
+                                                    class="btn-small"
+                                                    title="Sposta giu"
+                                                    name="direction"
+                                                    value="down"
+                                                    formaction="{{ route('monitoraggi.departments.move', [$section, $department]) }}"
+                                                >↓</button>
+                                            </div>
+
+                                            <div class="department-move">
+                                                @if ($department->is_active)
+                                                    <button type="submit" class="btn-small soft-btn" name="quick_action" value="hide">Oscura</button>
+                                                @else
+                                                    <button type="submit" class="btn-small soft-btn" name="quick_action" value="show">Riattiva</button>
+                                                @endif
+                                                <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" onclick="return confirm('Confermi eliminazione reparto? I punti collegati andranno in Senza reparto.');">Elimina</button>
+                                            </div>
+
+                                            <button type="submit" class="btn-small">Salva reparto</button>
+                                        </form>
+                                    @empty
+                                        <div class="department-row">
+                                            <p class="hint" style="grid-column: 1 / -1; margin: 0;">Nessun reparto configurato per questa sezione.</p>
+                                        </div>
+                                    @endforelse
+                                </div>
+                            </div>
+                        </details>
+                    @endforeach
+                </div>
+            </details>
+        @endif
+
         @forelse ($sections as $section)
+            @php
+                $groupedPoints = $section->samplingPoints->groupBy(
+                    fn ($point) => $point->department?->name ?: 'Senza reparto'
+                );
+            @endphp
             <details class="section">
                 <summary>
                     <div>
                         <p class="section-title">{{ $section->name }}</p>
                         <p class="section-desc">{{ $section->description }}</p>
                     </div>
-                    <span class="badge">{{ $section->samplingPoints->count() }} punti</span>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                        <span class="badge soft">{{ $section->departments->count() }} reparti</span>
+                        <span class="badge">{{ $section->samplingPoints->count() }} punti</span>
+                    </div>
                 </summary>
 
                 <div class="section-body">
+                    @if (auth()->user()?->isAdmin())
                     <details class="point-creator">
                         <summary>
-                            <span class="badge">Demo</span>
                             <span class="creator-title">Definisci nuovo campionamento (punto dinamico)</span>
                         </summary>
                         <div class="creator-body">
@@ -339,7 +591,18 @@
                                         <input id="new_title_{{ $section->id }}" type="text" name="title" maxlength="255" required placeholder="Nuovo punto campionamento demo">
                                     </div>
                                     <div class="field">
-                                        <label for="new_area_{{ $section->id }}">Area/Reparto</label>
+                                        <label for="new_department_{{ $section->id }}">Reparto</label>
+                                        <select id="new_department_{{ $section->id }}" name="monitoring_department_id" data-department-select data-section-id="{{ $section->id }}">
+                                            <option value="">Senza reparto</option>
+                                            @foreach ($section->departments as $department)
+                                                @if ($department->is_active)
+                                                    <option value="{{ $department->id }}">{{ $department->name }}</option>
+                                                @endif
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="new_area_{{ $section->id }}">Area dettagliata (opzionale)</label>
                                         <input id="new_area_{{ $section->id }}" type="text" name="area_label" maxlength="255" placeholder="es. Reparto test">
                                     </div>
                                     <div class="field">
@@ -378,10 +641,10 @@
                                     </div>
                                     <div class="field" style="grid-column: span 2;">
                                         <label for="new_anchor_{{ $section->id }}">Punto di riferimento (per prima/dopo)</label>
-                                        <select id="new_anchor_{{ $section->id }}" name="anchor_point_id">
+                                        <select id="new_anchor_{{ $section->id }}" name="anchor_point_id" data-anchor-select data-section-id="{{ $section->id }}">
                                             <option value="">Nessuno (usa in fondo)</option>
                                             @foreach ($section->samplingPoints as $point)
-                                                <option value="{{ $point->id }}">{{ $point->legacy_code ?: '-' }} - {{ $point->title }}</option>
+                                                <option value="{{ $point->id }}" data-department-id="{{ $point->monitoring_department_id ?? '' }}">{{ $point->department?->name ?: 'Senza reparto' }}: {{ $point->title }} {{ $point->sample_kind }}</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -393,7 +656,9 @@
                             </form>
                         </div>
                     </details>
+                    @endif
 
+                    @if (auth()->user()?->isOperatore())
                     <form action="{{ route('monitoraggi.checks.store', $section) }}" method="POST">
                         @csrf
 
@@ -438,7 +703,8 @@
                                 <tr>
                                     <th>ID legacy</th>
                                     <th>Descrizione punto</th>
-                                    <th>Reparto / Area</th>
+                                    <th>Reparto</th>
+                                    <th>Area dettagliata</th>
                                     <th>Ora</th>
                                     <th>Operativo</th>
                                     <th>Lotto prodotto</th>
@@ -448,43 +714,50 @@
                                 </tr>
                                 </thead>
                                 <tbody>
-                                @foreach ($section->samplingPoints as $point)
-                                    <tr>
-                                        <td>{{ $point->legacy_code ?: '-' }}</td>
-                                        <td>
-                                            {{ $point->title }}
-                                            <div class="kind">{{ $point->sample_kind }}</div>
-                                        </td>
-                                        <td>{{ $point->area_label ?: '-' }}</td>
-                                        <td>
-                                            <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ old("points.{$point->id}.sampled_at") }}">
-                                        </td>
-                                        <td>
-                                            @if ($point->requires_operational_status)
-                                                <select name="points[{{ $point->id }}][is_operational]">
-                                                    <option value="">-</option>
-                                                    <option value="1" @selected(old("points.{$point->id}.is_operational") === '1')>Si</option>
-                                                    <option value="0" @selected(old("points.{$point->id}.is_operational") === '0')>No</option>
-                                                </select>
-                                            @else
-                                                -
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if ($point->requires_product_lot)
-                                                <input type="text" name="points[{{ $point->id }}][product_lot]" value="{{ old("points.{$point->id}.product_lot") }}" maxlength="120">
-                                            @else
-                                                -
-                                            @endif
-                                        </td>
-                                        <td>{{ $point->default_volume_liters ?? '-' }}</td>
-                                        <td>
-                                            <input type="number" min="0" name="points[{{ $point->id }}][cfu_count]" value="{{ old("points.{$point->id}.cfu_count") }}">
-                                        </td>
-                                        <td>
-                                            <input type="text" name="points[{{ $point->id }}][notes]" value="{{ old("points.{$point->id}.notes") }}" maxlength="500">
-                                        </td>
+                                @foreach ($groupedPoints as $departmentName => $points)
+                                    <tr class="group-row">
+                                        <td colspan="10">Reparto: {{ $departmentName }}</td>
                                     </tr>
+
+                                    @foreach ($points as $point)
+                                        <tr>
+                                            <td>{{ $point->legacy_code ?: '-' }}</td>
+                                            <td>
+                                                {{ $point->title }}
+                                                <div class="kind">{{ $point->sample_kind }}</div>
+                                            </td>
+                                            <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
+                                            <td>{{ $point->area_label ?: '-' }}</td>
+                                            <td>
+                                                <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ old("points.{$point->id}.sampled_at") }}">
+                                            </td>
+                                            <td>
+                                                @if ($point->requires_operational_status)
+                                                    <select name="points[{{ $point->id }}][is_operational]">
+                                                        <option value="">-</option>
+                                                        <option value="1" @selected(old("points.{$point->id}.is_operational") === '1')>Si</option>
+                                                        <option value="0" @selected(old("points.{$point->id}.is_operational") === '0')>No</option>
+                                                    </select>
+                                                @else
+                                                    -
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if ($point->requires_product_lot)
+                                                    <input type="text" name="points[{{ $point->id }}][product_lot]" value="{{ old("points.{$point->id}.product_lot") }}" maxlength="120">
+                                                @else
+                                                    -
+                                                @endif
+                                            </td>
+                                            <td>{{ $point->default_volume_liters ?? '-' }}</td>
+                                            <td>
+                                                <input type="number" min="0" name="points[{{ $point->id }}][cfu_count]" value="{{ old("points.{$point->id}.cfu_count") }}">
+                                            </td>
+                                            <td>
+                                                <input type="text" name="points[{{ $point->id }}][notes]" value="{{ old("points.{$point->id}.notes") }}" maxlength="500">
+                                            </td>
+                                        </tr>
+                                    @endforeach
                                 @endforeach
                                 </tbody>
                             </table>
@@ -502,6 +775,13 @@
                             <button type="submit">Salva sezione</button>
                         </div>
                     </form>
+                    @else
+                    <div class="actions" style="margin-top:12px;">
+                        <p class="hint">
+                            La compilazione del campionamento e consentita solo agli utenti con ruolo operatore.
+                        </p>
+                    </div>
+                    @endif
                 </div>
             </details>
         @empty
@@ -517,5 +797,39 @@
         @endforelse
     </section>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-department-select]').forEach(function (departmentSelect) {
+            var sectionId = departmentSelect.getAttribute('data-section-id');
+            var anchorSelect = document.querySelector('[data-anchor-select][data-section-id="' + sectionId + '"]');
+
+            if (!anchorSelect) {
+                return;
+            }
+
+            var syncAnchorOptions = function () {
+                var selectedDepartmentId = departmentSelect.value;
+
+                Array.from(anchorSelect.options).forEach(function (option, index) {
+                    if (index === 0) {
+                        option.hidden = false;
+                        return;
+                    }
+
+                    var optionDepartmentId = option.getAttribute('data-department-id') || '';
+                    var visible = selectedDepartmentId === '' || optionDepartmentId === selectedDepartmentId;
+                    option.hidden = !visible;
+                });
+
+                if (anchorSelect.selectedIndex > 0 && anchorSelect.options[anchorSelect.selectedIndex].hidden) {
+                    anchorSelect.value = '';
+                }
+            };
+
+            departmentSelect.addEventListener('change', syncAnchorOptions);
+            syncAnchorOptions();
+        });
+    });
+</script>
 </body>
 </html>

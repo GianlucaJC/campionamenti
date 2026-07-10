@@ -32,6 +32,16 @@ class MonitoringSection extends Model
     }
 
     /**
+     * @return HasMany<MonitoringDepartment>
+     */
+    public function departments(): HasMany
+    {
+        return $this->hasMany(MonitoringDepartment::class)
+            ->orderBy('sort_order')
+            ->orderBy('name');
+    }
+
+    /**
      * @return HasMany<MicrobiologicalCheck>
      */
     public function checks(): HasMany

@@ -18,6 +18,7 @@ class SamplingPoint extends Model
      */
     protected $fillable = [
         'monitoring_section_id',
+        'monitoring_department_id',
         'legacy_code',
         'title',
         'area_label',
@@ -35,6 +36,14 @@ class SamplingPoint extends Model
     public function section(): BelongsTo
     {
         return $this->belongsTo(MonitoringSection::class, 'monitoring_section_id');
+    }
+
+    /**
+     * @return BelongsTo<MonitoringDepartment, SamplingPoint>
+     */
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(MonitoringDepartment::class, 'monitoring_department_id');
     }
 
     /**
