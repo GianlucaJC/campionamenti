@@ -269,6 +269,7 @@ class MonitoringController extends Controller
         DB::transaction(function () use ($data, $pointCollection, $section): void {
             $check = MicrobiologicalCheck::query()->create([
                 'monitoring_section_id' => $section->id,
+                'sampled_on' => $data['sampled_on'],
                 'created_by_user_id' => Auth::id(),
             ]);
 
