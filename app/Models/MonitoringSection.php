@@ -17,6 +17,8 @@ class MonitoringSection extends Model
      */
     protected $fillable = [
         'code',
+        'environment',
+        'sub_environment',
         'name',
         'description',
         'sort_order',

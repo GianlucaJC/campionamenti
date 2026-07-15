@@ -33,12 +33,18 @@ Route::middleware(['auth', 'role:admin,operatore'])->group(function () {
 Route::middleware(['auth', 'role:operatore'])->group(function () {
     Route::post('/monitoraggi/{section}/checks', [MonitoringController::class, 'store'])
         ->name('monitoraggi.checks.store');
+    Route::patch('/monitoraggi/{section}/checks/{check}', [MonitoringController::class, 'updateCheck'])
+        ->name('monitoraggi.checks.update');
 });
 
 // Accessibile solo da admin (gestione struttura)
 Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('/monitoraggi/{section}/points', [MonitoringController::class, 'storePoint'])
         ->name('monitoraggi.points.store');
+    Route::patch('/monitoraggi/{section}/points/{point}', [MonitoringController::class, 'updatePoint'])
+        ->name('monitoraggi.points.update');
+    Route::patch('/monitoraggi/{section}/points/{point}/move', [MonitoringController::class, 'movePoint'])
+        ->name('monitoraggi.points.move');
     Route::post('/monitoraggi/{section}/departments', [MonitoringController::class, 'storeDepartment'])
         ->name('monitoraggi.departments.store');
     Route::patch('/monitoraggi/{section}/departments/{department}', [MonitoringController::class, 'updateDepartment'])

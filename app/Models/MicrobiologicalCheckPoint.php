@@ -19,9 +19,18 @@ class MicrobiologicalCheckPoint extends Model
         'microbiological_check_id',
         'sampling_point_id',
         'sampled_at',
+        'exposure_ended_at',
         'is_operational',
         'product_lot',
         'cfu_count',
+        'first_cfu_count',
+        'second_cfu_count',
+        'first_growth_result',
+        'second_growth_result',
+        'coliform_result',
+        'pseudomonas_result',
+        'enterococci_result',
+        'ph_value',
         'notes',
     ];
 
