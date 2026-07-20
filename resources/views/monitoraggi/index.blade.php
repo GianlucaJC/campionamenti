@@ -550,6 +550,18 @@
             border-bottom: 1px solid #d4e8d6;
         }
 
+        .water-phase-panel {
+            display: grid;
+            grid-template-columns: minmax(220px, 280px) 1fr;
+            gap: 14px;
+            align-items: end;
+            margin: 14px 0 10px;
+        }
+
+        .water-phase-panel .hint {
+            margin: 0;
+        }
+
         button {
             border: 0;
             border-radius: 10px;
@@ -578,6 +590,11 @@
             .trend-grid,
             .archive-filters-grid {
                 grid-template-columns: repeat(1, minmax(140px, 1fr));
+            }
+
+            .water-phase-panel {
+                grid-template-columns: 1fr;
+                align-items: stretch;
             }
 
             .department-row {
@@ -1362,21 +1379,37 @@
                                     @endif
                                 </div>
 
+                                @if ($currentEnvironment === 'acque')
+                                    <div class="water-phase-panel">
+                                        <div class="field" style="margin:0;">
+                                            <label for="water_phase_{{ $section->id }}">Fase operativa</label>
+                                            <select id="water_phase_{{ $section->id }}" data-water-phase data-section-id="{{ $section->id }}">
+                                                <option value="campionamento" @selected(old('water_phase') === 'campionamento' || (! $isEditingSection && old('water_phase') === null))>Campionamento</option>
+                                                <option value="inserimento_dati" @selected(old('water_phase') === 'inserimento_dati')>Inserimento dati</option>
+                                                <option value="modifica" @selected(old('water_phase') === 'modifica' || ($isEditingSection && old('water_phase') === null))>Modifica</option>
+                                                <option value="conferma" @selected(old('water_phase') === 'conferma')>Conferma</option>
+                                            </select>
+                                        </div>
+                                        <p class="hint">La tabella mostra solo le colonne utili alla fase scelta per migliorare la leggibilita operativa.</p>
+                                    </div>
+                                @endif
+
                                 <div class="table-scroll">
-                                    <table>
+                                    <table @if ($currentEnvironment === 'acque') data-water-phase-table data-section-id="{{ $section->id }}" @endif>
                                         <thead>
                                         @if ($currentEnvironment === 'acque')
                                             <tr>
-                                                <th>ID legacy</th>
-                                                <th>Descrizione punto</th>
-                                                <th>Reparto</th>
-                                                <th>Area dettagliata</th>
-                                                <th>Aerobi Totali (UFC/ml)</th>
-                                                <th>Coliformi</th>
-                                                <th>Pseudomonas</th>
-                                                <th>Enterococchi</th>
-                                                <th>pH</th>
-                                                <th>Note</th>
+                                                <th data-water-col="legacy">ID legacy</th>
+                                                <th data-water-col="description">Descrizione punto</th>
+                                                <th data-water-col="sample_kind">Tipologia</th>
+                                                <th data-water-col="department">Reparto</th>
+                                                <th data-water-col="area">Dove si trova</th>
+                                                <th data-water-col="cfu">Aerobi Totali (UFC/ml)</th>
+                                                <th data-water-col="coliform">Coliformi</th>
+                                                <th data-water-col="pseudomonas">Pseudomonas</th>
+                                                <th data-water-col="enterococci">Enterococchi</th>
+                                                <th data-water-col="ph">pH</th>
+                                                <th data-water-col="point_notes">Note</th>
                                             </tr>
                                         @else
                                             <tr>
@@ -1396,50 +1429,55 @@
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
                                             <tr class="group-row">
-                                                <td colspan="10">Reparto: {{ $departmentName }}</td>
+                                                <td colspan="{{ $currentEnvironment === 'acque' ? 11 : 10 }}">Reparto: {{ $departmentName }}</td>
                                             </tr>
 
                                             @foreach ($points as $point)
                                                 <tr>
-                                                    <td>{{ $point->legacy_code ?: '-' }}</td>
-                                                    <td>
-                                                        {{ $point->title }}
-                                                        <div class="kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</div>
-                                                    </td>
-                                                    <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
-                                                    <td>{{ $point->area_label ?: '-' }}</td>
                                                     @if ($currentEnvironment === 'acque')
-                                                        <td>
+                                                        <td data-water-col="legacy">{{ $point->legacy_code ?: '-' }}</td>
+                                                        <td data-water-col="description">{{ $point->title }}</td>
+                                                        <td data-water-col="sample_kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</td>
+                                                        <td data-water-col="department">{{ $point->department?->name ?: 'Senza reparto' }}</td>
+                                                        <td data-water-col="area">{{ $point->area_label ?: '-' }}</td>
+                                                        <td data-water-col="cfu">
                                                             <input type="number" min="0" name="points[{{ $point->id }}][cfu_count]" value="{{ old("points.{$point->id}.cfu_count", data_get($editingPointResults->get($point->id), 'cfu_count')) }}">
                                                         </td>
-                                                        <td>
+                                                        <td data-water-col="coliform">
                                                             <select name="points[{{ $point->id }}][coliform_result]">
                                                                 <option value="">-</option>
                                                                 <option value="present" @selected(old("points.{$point->id}.coliform_result", data_get($editingPointResults->get($point->id), 'coliform_result')) === 'present')>Presente</option>
                                                                 <option value="not_present" @selected(old("points.{$point->id}.coliform_result", data_get($editingPointResults->get($point->id), 'coliform_result')) === 'not_present')>Non presente</option>
                                                             </select>
                                                         </td>
-                                                        <td>
+                                                        <td data-water-col="pseudomonas">
                                                             <select name="points[{{ $point->id }}][pseudomonas_result]">
                                                                 <option value="">-</option>
                                                                 <option value="present" @selected(old("points.{$point->id}.pseudomonas_result", data_get($editingPointResults->get($point->id), 'pseudomonas_result')) === 'present')>Presente</option>
                                                                 <option value="not_present" @selected(old("points.{$point->id}.pseudomonas_result", data_get($editingPointResults->get($point->id), 'pseudomonas_result')) === 'not_present')>Non presente</option>
                                                             </select>
                                                         </td>
-                                                        <td>
+                                                        <td data-water-col="enterococci">
                                                             <select name="points[{{ $point->id }}][enterococci_result]">
                                                                 <option value="">-</option>
                                                                 <option value="present" @selected(old("points.{$point->id}.enterococci_result", data_get($editingPointResults->get($point->id), 'enterococci_result')) === 'present')>Presente</option>
                                                                 <option value="not_present" @selected(old("points.{$point->id}.enterococci_result", data_get($editingPointResults->get($point->id), 'enterococci_result')) === 'not_present')>Non presente</option>
                                                             </select>
                                                         </td>
-                                                        <td>
+                                                        <td data-water-col="ph">
                                                             <input type="text" name="points[{{ $point->id }}][ph_value]" value="{{ old("points.{$point->id}.ph_value", data_get($editingPointResults->get($point->id), 'ph_value')) }}" maxlength="20">
                                                         </td>
-                                                        <td>
+                                                        <td data-water-col="point_notes">
                                                             <input type="text" name="points[{{ $point->id }}][notes]" value="{{ old("points.{$point->id}.notes", data_get($editingPointResults->get($point->id), 'notes')) }}" maxlength="500">
                                                         </td>
                                                     @else
+                                                        <td>{{ $point->legacy_code ?: '-' }}</td>
+                                                        <td>
+                                                            {{ $point->title }}
+                                                            <div class="kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</div>
+                                                        </td>
+                                                        <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
+                                                        <td>{{ $point->area_label ?: '-' }}</td>
                                                         <td>
                                                             <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')) }}">
                                                         </td>
@@ -1539,6 +1577,58 @@
 
             departmentSelect.addEventListener('change', syncAnchorOptions);
             syncAnchorOptions();
+        });
+
+        document.querySelectorAll('[data-water-phase]').forEach(function (phaseSelect) {
+            var sectionId = phaseSelect.getAttribute('data-section-id');
+            var table = document.querySelector('[data-water-phase-table][data-section-id="' + sectionId + '"]');
+
+            if (!table) {
+                return;
+            }
+
+            var phaseStorageKey = 'water_phase_section_' + sectionId;
+            var visibilityMap = {
+                campionamento: ['legacy', 'description', 'sample_kind', 'department', 'area'],
+                inserimento_dati: ['legacy', 'cfu', 'coliform', 'pseudomonas', 'enterococci', 'ph', 'point_notes'],
+                modifica: ['legacy', 'description', 'sample_kind', 'department', 'area', 'cfu', 'coliform', 'pseudomonas', 'enterococci', 'ph', 'point_notes'],
+                conferma: ['legacy', 'description', 'sample_kind', 'department', 'area', 'cfu', 'coliform', 'pseudomonas', 'enterococci', 'ph', 'point_notes']
+            };
+
+            var updatePhaseColumns = function (phase) {
+                var visibleColumns = visibilityMap[phase] || visibilityMap.campionamento;
+
+                table.querySelectorAll('[data-water-col]').forEach(function (cell) {
+                    var key = cell.getAttribute('data-water-col');
+                    var shouldShow = visibleColumns.indexOf(key) !== -1;
+                    cell.style.display = shouldShow ? '' : 'none';
+                });
+
+                table.querySelectorAll('tr.group-row td').forEach(function (groupCell) {
+                    groupCell.colSpan = visibleColumns.length;
+                });
+            };
+
+            try {
+                var savedPhase = localStorage.getItem(phaseStorageKey);
+                if (savedPhase && visibilityMap[savedPhase]) {
+                    phaseSelect.value = savedPhase;
+                }
+            } catch (error) {
+                // Ignore localStorage restrictions and proceed with selected option.
+            }
+
+            updatePhaseColumns(phaseSelect.value);
+
+            phaseSelect.addEventListener('change', function () {
+                updatePhaseColumns(phaseSelect.value);
+
+                try {
+                    localStorage.setItem(phaseStorageKey, phaseSelect.value);
+                } catch (error) {
+                    // Ignore localStorage restrictions.
+                }
+            });
         });
     });
 </script>
