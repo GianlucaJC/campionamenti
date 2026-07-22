@@ -18,14 +18,14 @@ class MonitoringTemplateSeeder extends Seeder
             ['code' => 'punti_uso', 'name' => 'Punti uso', 'sort_order' => 10],
         ];
 
-        $waterSections = [
+        $waterPointGroups = [
             [
                 'section' => [
-                    'code' => 'acque_sede_1',
+                    'code' => 'water_points_primary',
                     'environment' => 'acque',
-                    'sub_environment' => 's1',
-                    'name' => 'Acque - Sede 1',
-                    'description' => 'Punti acqua legacy della Sede 1. Nel modello attuale la sezione copre il tracciamento puntuale dei campioni acqua.',
+                    'sub_environment' => null,
+                    'name' => 'Punti acqua principali',
+                    'description' => 'Punti configurati per il campionamento acqua.',
                     'sort_order' => 120,
                     'is_active' => true,
                 ],
@@ -35,19 +35,19 @@ class MonitoringTemplateSeeder extends Seeder
                     ['legacy_code' => 'P-2', 'title' => 'P-2_Purified Water a valle dell\'impianto di Osmosi Inversa', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 20],
                     ['legacy_code' => 'P-3', 'title' => 'P-3_Purified Water in uscita dal serbatoio', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 30],
                     ['legacy_code' => 'P-4', 'title' => 'P-4_Purified Water a valle del trattamento con resine a Scambio Ionico', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 40],
-                    ['legacy_code' => 'P-5', 'title' => 'P-5: Purified Water locale n.22 "Autoclavi/Preparatori"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Sede 1', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 50],
-                    ['legacy_code' => 'P-6', 'title' => 'P-6: Purified Water locale n.24 "Provette e Flaconi"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Sede 1', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 60],
-                    ['legacy_code' => 'P-7', 'title' => 'P-7: Purified Water locale n.25 "Autoclavi"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Sede 1', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 70],
-                    ['legacy_code' => 'P-8', 'title' => 'P-8: Purified Water locale n.19 "Bioindicatori/Fiale"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Sede 1', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 80],
+                    ['legacy_code' => 'P-5', 'title' => 'P-5: Purified Water locale n.22 "Autoclavi/Preparatori"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 50],
+                    ['legacy_code' => 'P-6', 'title' => 'P-6: Purified Water locale n.24 "Provette e Flaconi"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 60],
+                    ['legacy_code' => 'P-7', 'title' => 'P-7: Purified Water locale n.25 "Autoclavi"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 70],
+                    ['legacy_code' => 'P-8', 'title' => 'P-8: Purified Water locale n.19 "Bioindicatori/Fiale"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 80],
                 ],
             ],
             [
                 'section' => [
-                    'code' => 'acque_sede_2',
+                    'code' => 'water_points_secondary',
                     'environment' => 'acque',
-                    'sub_environment' => 's2',
-                    'name' => 'Acque - Sede 2',
-                    'description' => 'Punti acqua legacy della Sede 2. Nel modello attuale la sezione copre il tracciamento puntuale dei campioni acqua.',
+                    'sub_environment' => null,
+                    'name' => 'Punti acqua aggiuntivi',
+                    'description' => 'Punti configurati per il campionamento acqua.',
                     'sort_order' => 130,
                     'is_active' => true,
                 ],
@@ -57,15 +57,43 @@ class MonitoringTemplateSeeder extends Seeder
                     ['legacy_code' => 'P-2a', 'title' => 'P-2a_Purified Water a valle dell\'impianto di Osmosi Inversa', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 20],
                     ['legacy_code' => 'P-3', 'title' => 'P-3: Purified Water in uscita dal serbatoio e a monte dell\'impianto di Osmosi Inversa', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 30],
                     ['legacy_code' => 'P-4', 'title' => 'P-4_Purified Water a valle del trattamento con resine a Scambio Ionico', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 40],
-                    ['legacy_code' => 'P-5', 'title' => 'P-5: Purified Water locale n.10 "Autoclavi", building S2', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Building S2', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 50],
-                    ['legacy_code' => 'P-6', 'title' => 'P-6_Purified Water Locale n.32 "Laboratorio Chimico"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Building S2', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 60],
-                    ['legacy_code' => 'P-7', 'title' => 'P-7: Purified Water locale "Laboratorio Controllo Qualita", building S2', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Building S2', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 70],
-                    ['legacy_code' => 'P-8', 'title' => 'P-8: Purified Water locale n.27 "Prodotti Speciali", building S2', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Building S2', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 80],
-                    ['legacy_code' => 'P-9', 'title' => 'P-9: Purified Water locale n.11 "Laboratorio MTS", building S3', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Building S3', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 90],
-                    ['legacy_code' => 'P-10', 'title' => 'P-10: Purified Water locale n.34 Laboratorio Sistemi, building S2', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Building S2', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 100],
+                    ['legacy_code' => 'P-5', 'title' => 'P-5: Purified Water locale n.10 "Autoclavi"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 50],
+                    ['legacy_code' => 'P-6', 'title' => 'P-6_Purified Water Locale n.32 "Laboratorio Chimico"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 60],
+                    ['legacy_code' => 'P-7', 'title' => 'P-7: Purified Water locale "Laboratorio Controllo Qualita"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 70],
+                    ['legacy_code' => 'P-8', 'title' => 'P-8: Purified Water locale n.27 "Prodotti Speciali"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 80],
+                    ['legacy_code' => 'P-9', 'title' => 'P-9: Purified Water locale n.11 "Laboratorio MTS"', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 90],
+                    ['legacy_code' => 'P-10', 'title' => 'P-10: Purified Water locale n.34 Laboratorio Sistemi', 'department_code' => 'punti_uso', 'sample_kind' => 'water', 'area_label' => 'Punto uso', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 100],
                 ],
             ],
         ];
+
+        $waterPoints = [];
+
+        foreach ($waterPointGroups as $waterSection) {
+            foreach ($waterSection['points'] as $point) {
+                $legacyCode = $point['legacy_code'];
+
+                if (collect($waterPoints)->contains('legacy_code', $legacyCode)) {
+                    $point['legacy_code'] = "{$legacyCode}-2";
+                }
+
+                $waterPoints[] = $point;
+            }
+        }
+
+        $waterSections = [[
+            'section' => [
+                'code' => 'acque',
+                'environment' => 'acque',
+                'sub_environment' => null,
+                'name' => 'Acque',
+                'description' => 'Campionamento microbiologico dell\'acqua.',
+                'sort_order' => 120,
+                'is_active' => true,
+            ],
+            'departments' => $waterDepartments,
+            'points' => $waterPoints,
+        ]];
 
         $operatorDepartments = [
             ['code' => 'operatori', 'name' => 'Operatori', 'sort_order' => 10],

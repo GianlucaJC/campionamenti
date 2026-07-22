@@ -248,6 +248,237 @@
             margin-bottom: 14px;
         }
 
+        .water-wizard {
+            margin-bottom: 14px;
+            border: 1px solid #b8d2cb;
+            border-radius: 8px;
+            background: #f3faf8;
+            padding: 12px;
+        }
+
+        .water-wizard-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .water-wizard-title {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .water-step-indicator {
+            color: #0f5a56;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .water-sampling-sheet {
+            border: 1px solid #b7aaa0;
+            border-radius: 8px;
+            background: #fff;
+            margin-bottom: 14px;
+            overflow: hidden;
+        }
+
+        .water-sheet-title {
+            margin: 0;
+            background: #f1e7dc;
+            border-bottom: 1px solid #b7aaa0;
+            font-size: 0.92rem;
+            font-weight: 700;
+            padding: 10px 12px;
+        }
+
+        .water-sheet-header {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(140px, 1fr));
+            gap: 0;
+            border-bottom: 1px solid #d9cec2;
+        }
+
+        .water-sheet-header .field {
+            border-right: 1px solid #d9cec2;
+            padding: 10px;
+        }
+
+        .water-sheet-header .field:last-child {
+            border-right: 0;
+        }
+
+        .water-media-sheet {
+            display: grid;
+            grid-template-columns: 150px repeat(4, minmax(150px, 1fr));
+            overflow-x: auto;
+        }
+
+        .water-media-cell {
+            border-right: 1px solid #d9cec2;
+            border-bottom: 1px solid #d9cec2;
+            min-width: 150px;
+            padding: 8px;
+        }
+
+        .water-media-cell:nth-child(5n) {
+            border-right: 0;
+        }
+
+        .water-media-label {
+            align-items: center;
+            background: #fbf6f0;
+            color: #5f554a;
+            display: flex;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .water-media-heading {
+            background: #f6ede2;
+            font-size: 0.8rem;
+            font-weight: 700;
+            min-height: 66px;
+        }
+
+        .water-media-fixed {
+            color: #4d625e;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .water-signature-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(160px, 1fr));
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .water-point-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .water-point-card {
+            width: 100%;
+            border: 1px solid #d6c8b6;
+            border-radius: 8px;
+            background: #fff;
+            color: var(--ink);
+            cursor: pointer;
+            display: grid;
+            grid-template-columns: minmax(190px, 1.5fr) repeat(5, minmax(90px, 1fr));
+            gap: 10px;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .water-point-card:hover,
+        .water-point-card:focus-visible {
+            border-color: var(--accent);
+            outline: 2px solid #b9dfda;
+            outline-offset: 2px;
+        }
+
+        .water-point-name,
+        .water-point-summary {
+            display: grid;
+            gap: 3px;
+        }
+
+        .water-point-name strong {
+            font-size: 0.9rem;
+        }
+
+        .water-point-summary span:first-child {
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .water-point-summary span:last-child {
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        dialog.water-point-dialog {
+            width: min(760px, calc(100vw - 24px));
+            max-height: calc(100vh - 24px);
+            border: 1px solid #b8d2cb;
+            border-radius: 8px;
+            color: var(--ink);
+            padding: 0;
+            box-shadow: 0 18px 48px rgba(31, 42, 48, 0.28);
+        }
+
+        dialog.water-point-dialog::backdrop {
+            background: rgba(31, 42, 48, 0.48);
+        }
+
+        .water-dialog-body {
+            display: grid;
+            gap: 14px;
+            max-height: calc(100vh - 24px);
+            overflow-y: auto;
+            padding: 18px;
+        }
+
+        .water-dialog-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .water-dialog-head h3,
+        .water-dialog-head p {
+            margin: 0;
+        }
+
+        .water-result-group {
+            border: 1px solid #ded3c6;
+            border-radius: 8px;
+            margin: 0;
+            padding: 10px;
+        }
+
+        .water-result-group legend {
+            padding: 0 5px;
+            font-size: 0.84rem;
+            font-weight: 700;
+        }
+
+        .water-modal-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(130px, 1fr));
+            gap: 10px;
+        }
+
+        @media (max-width: 760px) {
+            .water-sheet-header,
+            .water-signature-row {
+                grid-template-columns: 1fr;
+            }
+
+            .water-sheet-header .field {
+                border-bottom: 1px solid #d9cec2;
+                border-right: 0;
+            }
+
+            .water-point-card {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .water-point-name {
+                grid-column: 1 / -1;
+            }
+
+            .water-modal-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .field {
             display: grid;
             gap: 4px;
@@ -759,7 +990,7 @@
                                         </a>
                                     </strong>
                                     @if ($currentEnvironment === 'acque')
-                                        <span class="badge soft">Stabilimento {{ ($check->section?->sub_environment ?? null) === 's1' ? 'Sede 1' : (($check->section?->sub_environment ?? null) === 's2' ? 'Sede 2' : 'Acque') }}</span>
+                                        <span class="badge soft">Acque</span>
                                     @endif
                                     <span class="hint">Punti compilati: {{ $check->point_results_count }}</span>
                                     <span class="hint">Operatore: {{ $check->operator_name ?: ($check->author?->name ?: '-') }}</span>
@@ -772,6 +1003,8 @@
                                     @if ($currentEnvironment === 'acque')
                                         <div class="archive-water-meta">
                                             <span class="hint">Operatore CQ: {{ $check->cq_operator_name ?: '-' }}</span>
+                                            <span class="hint">Firma inizio incubazione: {{ $check->incubation_started_signature ?: '-' }}</span>
+                                            <span class="hint">Firma fine incubazione: {{ $check->incubation_finished_signature ?: '-' }}</span>
                                             <span class="hint">Membrana: {{ $check->membrane_lot ?: '-' }}</span>
                                             <span class="hint">Sterilizzazione flaconi: {{ $check->bottle_sterilization_lot ?: '-' }}</span>
                                             <span class="hint">R2A Agar: {{ $check->r2a_agar_lot ?: '-' }}</span>
@@ -786,24 +1019,40 @@
                                                     <thead>
                                                     <tr>
                                                         <th>Punto</th>
-                                                        <th>Aerobi Totali</th>
-                                                        <th>Coliformi</th>
-                                                        <th>Pseudomonas</th>
-                                                        <th>Enterococchi</th>
+                                                        <th>Aerobi<br>UFC/piastra</th>
+                                                        <th>Aerobi<br>UFC/ml</th>
+                                                        <th>Coliformi<br>UFC/piastra</th>
+                                                        <th>Coliformi<br>UFC confermate</th>
+                                                        <th>Coliformi<br>UFC/100 ml</th>
+                                                        <th>Pseudomonas<br>UFC/piastra</th>
+                                                        <th>Pseudomonas<br>UFC confermate</th>
+                                                        <th>Pseudomonas<br>UFC/100 ml</th>
+                                                        <th>Enterococchi<br>UFC/piastra</th>
+                                                        <th>Enterococchi<br>UFC confermate</th>
+                                                        <th>Enterococchi<br>UFC/100 ml</th>
                                                         <th>pH</th>
-                                                        <th>Note</th>
+                                                        <th>Aspetto</th>
+                                                        <th>Risultato finale</th>
                                                     </tr>
                                                     </thead>
                                                     <tbody>
                                                     @foreach ($check->pointResults->sortBy(fn ($result) => $result->point?->sort_order ?? 999999) as $pointResult)
                                                         <tr>
                                                             <td>{{ $pointResult->point?->title ?: 'Punto rimosso' }}</td>
-                                                            <td>{{ $pointResult->cfu_count ?? '-' }}</td>
-                                                            <td>{{ $pointResult->coliform_result === 'present' ? 'Presente' : ($pointResult->coliform_result === 'not_present' ? 'Non presente' : '-') }}</td>
-                                                            <td>{{ $pointResult->pseudomonas_result === 'present' ? 'Presente' : ($pointResult->pseudomonas_result === 'not_present' ? 'Non presente' : '-') }}</td>
-                                                            <td>{{ $pointResult->enterococci_result === 'present' ? 'Presente' : ($pointResult->enterococci_result === 'not_present' ? 'Non presente' : '-') }}</td>
+                                                            <td>{{ $pointResult->aerobic_plate_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->aerobic_cfu_per_ml ?? $pointResult->cfu_count ?? '-' }}</td>
+                                                            <td>{{ $pointResult->coliform_plate_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->coliform_confirmed_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->coliform_cfu_per_100ml ?? '-' }}</td>
+                                                            <td>{{ $pointResult->pseudomonas_plate_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->pseudomonas_confirmed_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->pseudomonas_cfu_per_100ml ?? '-' }}</td>
+                                                            <td>{{ $pointResult->enterococci_plate_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->enterococci_confirmed_cfu ?? '-' }}</td>
+                                                            <td>{{ $pointResult->enterococci_cfu_per_100ml ?? '-' }}</td>
                                                             <td>{{ $pointResult->ph_value ?: '-' }}</td>
-                                                            <td>{{ $pointResult->notes ?: '-' }}</td>
+                                                            <td>{{ $pointResult->appearance_result === 'conforme' ? 'Conforme' : ($pointResult->appearance_result === 'non_conforme' ? 'Non conforme' : '-') }}</td>
+                                                            <td>{{ $pointResult->final_result === 'conforme' ? 'Conforme' : ($pointResult->final_result === 'non_conforme' ? 'Non conforme' : '-') }}</td>
                                                         </tr>
                                                     @endforeach
                                                     </tbody>
@@ -1162,6 +1411,98 @@
                                     @method('PATCH')
                                 @endif
 
+                                @if ($currentEnvironment === 'acque')
+                                    @php
+                                        $waterMedia = [
+                                            ['title' => 'R2A Agar', 'lot' => 'r2a_agar_lot', 'expires' => 'r2a_agar_expires_on', 'incubator' => 'r2a_incubator_code', 'started' => 'r2a_incubation_started_on', 'finished' => 'r2a_incubation_finished_on', 'temperature' => '30-35 °C', 'duration' => '5 giorni'],
+                                            ['title' => 'Chromatic Coliform Agar ISO', 'lot' => 'coliform_agar_lot', 'expires' => 'coliform_agar_expires_on', 'incubator' => 'coliform_incubator_code', 'started' => 'coliform_incubation_started_on', 'finished' => 'coliform_incubation_finished_on', 'temperature' => '36 ± 2 °C', 'duration' => '21 ± 3 h'],
+                                            ['title' => 'Pseudomonas CN Agar', 'lot' => 'pseudomonas_cn_lot', 'expires' => 'pseudomonas_cn_expires_on', 'incubator' => 'pseudomonas_incubator_code', 'started' => 'pseudomonas_incubation_started_on', 'finished' => 'pseudomonas_incubation_finished_on', 'temperature' => '36 ± 2 °C', 'duration' => '44 ± 4 h'],
+                                            ['title' => 'Slanetz and Bartley Medium', 'lot' => 'slanetz_bartley_lot', 'expires' => 'slanetz_bartley_expires_on', 'incubator' => 'enterococci_incubator_code', 'started' => 'enterococci_incubation_started_on', 'finished' => 'enterococci_incubation_finished_on', 'temperature' => '36 ± 2 °C', 'duration' => '44 ± 4 h'],
+                                        ];
+                                    @endphp
+                                    <section class="water-sampling-sheet">
+                                        <h3 class="water-sheet-title">Dati campionamento</h3>
+                                        <div class="water-sheet-header">
+                                            <div class="field">
+                                                <label for="facility_name_{{ $section->id }}">Stabilimento</label>
+                                                <input id="facility_name_{{ $section->id }}" type="text" name="facility_name" value="{{ old('facility_name', $isEditingSection ? $editingCheck->facility_name : null) }}" maxlength="120">
+                                            </div>
+                                            <div class="field">
+                                                <label for="sampled_on_{{ $section->id }}">Data prelievo</label>
+                                                <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $isEditingSection ? $editingCheck->sampled_on : now()->toDateString()) }}" required>
+                                            </div>
+                                            <div class="field">
+                                                <label for="sampled_time_{{ $section->id }}">Ora prelievo</label>
+                                                <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', $isEditingSection ? $editingCheck->sampled_time : null) }}">
+                                            </div>
+                                            <div class="field">
+                                                <label for="membrane_lot_{{ $section->id }}">Lotto membrana filtrante</label>
+                                                <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', $isEditingSection ? $editingCheck->membrane_lot : null) }}" maxlength="120">
+                                            </div>
+                                            <div class="field">
+                                                <label for="bottle_sterilization_lot_{{ $section->id }}">Sterilizzazione materiali</label>
+                                                <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', $isEditingSection ? $editingCheck->bottle_sterilization_lot : null) }}" maxlength="120">
+                                            </div>
+                                        </div>
+
+                                        <div class="water-signature-row">
+                                            <div class="field">
+                                                <label for="operator_name_{{ $section->id }}">Campionatore - firma</label>
+                                                <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : auth()->user()?->name) }}" maxlength="120">
+                                            </div>
+                                            <div class="field" data-water-step-content="results">
+                                                <label for="incubation_started_signature_{{ $section->id }}">Firma inizio incubazione</label>
+                                                <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', $isEditingSection ? $editingCheck->incubation_started_signature : null) }}" maxlength="120">
+                                            </div>
+                                            <div class="field" data-water-step-content="results">
+                                                <label for="incubation_finished_signature_{{ $section->id }}">Firma fine incubazione</label>
+                                                <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', $isEditingSection ? $editingCheck->incubation_finished_signature : null) }}" maxlength="120">
+                                            </div>
+                                        </div>
+
+                                        <div class="water-media-sheet" data-water-step-content="results">
+                                            <div class="water-media-cell water-media-label">Terreno di coltura</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell water-media-heading">{{ $media['title'] }}</div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Lotto</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell"><input type="text" name="{{ $media['lot'] }}" value="{{ old($media['lot'], $isEditingSection ? data_get($editingCheck, $media['lot']) : null) }}" maxlength="120"></div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Scadenza</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell"><input type="date" name="{{ $media['expires'] }}" value="{{ old($media['expires'], $isEditingSection ? data_get($editingCheck, $media['expires']) : null) }}"></div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Temperatura incubazione</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell water-media-fixed">{{ $media['temperature'] }}</div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Tempo di incubazione</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell water-media-fixed">{{ $media['duration'] }}</div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Incubatore (codice)</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell"><input type="text" name="{{ $media['incubator'] }}" value="{{ old($media['incubator'], $isEditingSection ? data_get($editingCheck, $media['incubator']) : null) }}" maxlength="120"></div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Inizio incubazione</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell"><input type="date" name="{{ $media['started'] }}" value="{{ old($media['started'], $isEditingSection ? data_get($editingCheck, $media['started']) : null) }}"></div>
+                                            @endforeach
+                                            <div class="water-media-cell water-media-label">Fine incubazione</div>
+                                            @foreach ($waterMedia as $media)
+                                                <div class="water-media-cell"><input type="date" name="{{ $media['finished'] }}" value="{{ old($media['finished'], $isEditingSection ? data_get($editingCheck, $media['finished']) : null) }}"></div>
+                                            @endforeach
+                                        </div>
+
+                                        <div class="water-signature-row" data-water-step-content="results">
+                                            <div class="field">
+                                                <label for="cq_operator_name_{{ $section->id }}">Controllo qualità</label>
+                                                <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $isEditingSection ? $editingCheck->cq_operator_name : null) }}" maxlength="120">
+                                            </div>
+                                        </div>
+                                    </section>
+                                @else
                                 <div class="meta-grid">
                                     <div class="field">
                                         <label for="sampled_on_{{ $section->id }}">Data prelievo / inizio incubazione</label>
@@ -1199,6 +1540,7 @@
                                         </div>
                                     @endif
                                 </div>
+                                @endif
 
                                 <div class="table-scroll">
                                     <table>
@@ -1311,6 +1653,9 @@
                                     @method('PATCH')
                                 @endif
 
+                                @if ($currentEnvironment === 'acque')
+                                    @include('monitoraggi.partials.water-sampling-sheet')
+                                @else
                                 <div class="meta-grid">
                                     <div class="field">
                                         <label for="sampled_on_{{ $section->id }}">Data prelievo</label>
@@ -1322,48 +1667,56 @@
                                             <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', $isEditingSection ? $editingCheck->sampled_time : null) }}">
                                         </div>
                                     @endif
-                                    <div class="field">
+                                    <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <label for="incubation_started_on_{{ $section->id }}">Inizio incubazione</label>
                                         <input id="incubation_started_on_{{ $section->id }}" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', $isEditingSection ? $editingCheck->incubation_started_on : null) }}">
                                     </div>
-                                    <div class="field">
+                                    <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <label for="first_reading_on_{{ $section->id }}">1a lettura</label>
                                         <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $isEditingSection ? $editingCheck->first_reading_on : null) }}">
                                     </div>
-                                    <div class="field">
+                                    <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <label for="second_reading_on_{{ $section->id }}">2a lettura</label>
                                         <input id="second_reading_on_{{ $section->id }}" type="date" name="second_reading_on" value="{{ old('second_reading_on', $isEditingSection ? $editingCheck->second_reading_on : null) }}">
                                     </div>
                                     <div class="field">
-                                        <label for="operator_name_{{ $section->id }}">Operatore</label>
-                                        <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : null) }}" maxlength="120">
+                                        <label for="operator_name_{{ $section->id }}">Firma campionatore</label>
+                                        <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : auth()->user()?->name) }}" maxlength="120">
                                     </div>
-                                    <div class="field">
+                                    <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <label for="cq_operator_name_{{ $section->id }}">Operatore CQ</label>
                                         <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $isEditingSection ? $editingCheck->cq_operator_name : null) }}" maxlength="120">
                                     </div>
                                     @if ($currentEnvironment === 'acque')
-                                        <div class="field">
+                                        <div class="field" data-water-step-content="results">
+                                            <label for="incubation_started_signature_{{ $section->id }}">Firma inizio incubazione</label>
+                                            <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', $isEditingSection ? $editingCheck->incubation_started_signature : null) }}" maxlength="120">
+                                        </div>
+                                        <div class="field" data-water-step-content="results">
+                                            <label for="incubation_finished_signature_{{ $section->id }}">Firma fine incubazione</label>
+                                            <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', $isEditingSection ? $editingCheck->incubation_finished_signature : null) }}" maxlength="120">
+                                        </div>
+                                        <div class="field" data-water-step-content="results">
                                             <label for="membrane_lot_{{ $section->id }}">Membrana filtrante lotto</label>
                                             <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', $isEditingSection ? $editingCheck->membrane_lot : null) }}" maxlength="120">
                                         </div>
-                                        <div class="field">
+                                        <div class="field" data-water-step-content="results">
                                             <label for="bottle_sterilization_lot_{{ $section->id }}">Lotto sterilizzazione flaconi</label>
                                             <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', $isEditingSection ? $editingCheck->bottle_sterilization_lot : null) }}" maxlength="120">
                                         </div>
-                                        <div class="field">
+                                        <div class="field" data-water-step-content="results">
                                             <label for="r2a_agar_lot_{{ $section->id }}">R2A Agar Lotto</label>
                                             <input id="r2a_agar_lot_{{ $section->id }}" type="text" name="r2a_agar_lot" value="{{ old('r2a_agar_lot', $isEditingSection ? $editingCheck->r2a_agar_lot : null) }}" maxlength="120">
                                         </div>
-                                        <div class="field">
+                                        <div class="field" data-water-step-content="results">
                                             <label for="coliform_agar_lot_{{ $section->id }}">Chromatic Coliform Agar ISO / TTC Lotto</label>
                                             <input id="coliform_agar_lot_{{ $section->id }}" type="text" name="coliform_agar_lot" value="{{ old('coliform_agar_lot', $isEditingSection ? $editingCheck->coliform_agar_lot : null) }}" maxlength="120">
                                         </div>
-                                        <div class="field">
+                                        <div class="field" data-water-step-content="results">
                                             <label for="pseudomonas_cn_lot_{{ $section->id }}">Pseudomonas CN Agar Lotto</label>
                                             <input id="pseudomonas_cn_lot_{{ $section->id }}" type="text" name="pseudomonas_cn_lot" value="{{ old('pseudomonas_cn_lot', $isEditingSection ? $editingCheck->pseudomonas_cn_lot : null) }}" maxlength="120">
                                         </div>
-                                        <div class="field">
+                                        <div class="field" data-water-step-content="results">
                                             <label for="slanetz_bartley_lot_{{ $section->id }}">Slanetz and Bartley Medium lotto</label>
                                             <input id="slanetz_bartley_lot_{{ $section->id }}" type="text" name="slanetz_bartley_lot" value="{{ old('slanetz_bartley_lot', $isEditingSection ? $editingCheck->slanetz_bartley_lot : null) }}" maxlength="120">
                                         </div>
@@ -1378,38 +1731,152 @@
                                         </div>
                                     @endif
                                 </div>
+                                @endif
 
                                 @if ($currentEnvironment === 'acque')
-                                    <div class="water-phase-panel">
-                                        <div class="field" style="margin:0;">
-                                            <label for="water_phase_{{ $section->id }}">Fase operativa</label>
-                                            <select id="water_phase_{{ $section->id }}" data-water-phase data-section-id="{{ $section->id }}">
-                                                <option value="campionamento" @selected(old('water_phase') === 'campionamento' || (! $isEditingSection && old('water_phase') === null))>Campionamento</option>
-                                                <option value="inserimento_dati" @selected(old('water_phase') === 'inserimento_dati')>Inserimento dati</option>
-                                                <option value="modifica" @selected(old('water_phase') === 'modifica' || ($isEditingSection && old('water_phase') === null))>Modifica</option>
-                                                <option value="conferma" @selected(old('water_phase') === 'conferma')>Conferma</option>
-                                            </select>
+                                    <div class="water-wizard" data-water-wizard data-section-id="{{ $section->id }}">
+                                        <div class="water-wizard-head">
+                                            <div>
+                                                <p class="water-wizard-title">Campionamento acqua</p>
+                                                <p class="hint">Registra prima il prelievo e la firma del campionatore, poi completa terreni, incubazione e risultati dei punti.</p>
+                                            </div>
+                                            <span class="water-step-indicator" data-water-step-indicator>1 di 2</span>
                                         </div>
-                                        <p class="hint">La tabella mostra solo le colonne utili alla fase scelta per migliorare la leggibilita operativa.</p>
+                                        <div class="actions">
+                                            <button type="button" data-water-next>Continua ai punti</button>
+                                            <button type="button" class="soft-btn" data-water-previous hidden>Modifica dati prelievo</button>
+                                        </div>
                                     </div>
                                 @endif
 
+                                @if ($currentEnvironment === 'acque')
+                                    <div class="water-point-list" data-water-step-content="results">
+                                        @foreach ($groupedPoints as $departmentName => $points)
+                                            <p class="kind">Reparto: {{ $departmentName }}</p>
+                                            @foreach ($points as $point)
+                                                @php($pointResult = $editingPointResults->get($point->id))
+                                                <button type="button" class="water-point-card" data-water-open="water_point_{{ $section->id }}_{{ $point->id }}">
+                                                    <span class="water-point-name">
+                                                        <strong>{{ $point->legacy_code ?: '-' }}</strong>
+                                                        <span>{{ $point->title }}</span>
+                                                    </span>
+                                                    <span class="water-point-summary"><span>Aerobi</span><span data-water-summary="aerobic">-</span></span>
+                                                    <span class="water-point-summary"><span>Coliformi</span><span data-water-summary="coliform">-</span></span>
+                                                    <span class="water-point-summary"><span>Pseudomonas</span><span data-water-summary="pseudomonas">-</span></span>
+                                                    <span class="water-point-summary"><span>Enterococchi</span><span data-water-summary="enterococci">-</span></span>
+                                                    <span class="water-point-summary"><span>Esito</span><span data-water-summary="final">-</span></span>
+                                                </button>
+
+                                                <dialog id="water_point_{{ $section->id }}_{{ $point->id }}" class="water-point-dialog" data-water-dialog data-point-id="{{ $point->id }}">
+                                                    <div class="water-dialog-body">
+                                                        <div class="water-dialog-head">
+                                                            <div>
+                                                                <h3>{{ $point->legacy_code ?: 'Punto' }} - {{ $point->title }}</h3>
+                                                                <p class="hint">Inserisci i risultati riportati nel modulo di analisi acqua.</p>
+                                                            </div>
+                                                            <button type="button" class="soft-btn" data-water-close aria-label="Chiudi">Chiudi</button>
+                                                        </div>
+
+                                                        <fieldset class="water-result-group">
+                                                            <legend>Microrganismi Aerobi Totali</legend>
+                                                            <div class="water-modal-grid">
+                                                                <div class="field">
+                                                                    <label>UFC/piastra</label>
+                                                                    <input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][aerobic_plate_cfu]" value="{{ old("points.{$point->id}.aerobic_plate_cfu", data_get($pointResult, 'aerobic_plate_cfu')) }}">
+                                                                </div>
+                                                                <div class="field">
+                                                                    <label>UFC/ml</label>
+                                                                    <input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][aerobic_cfu_per_ml]" value="{{ old("points.{$point->id}.aerobic_cfu_per_ml", data_get($pointResult, 'aerobic_cfu_per_ml')) }}">
+                                                                </div>
+                                                            </div>
+                                                        </fieldset>
+
+                                                        <fieldset class="water-result-group">
+                                                            <legend>Coliformi Totali</legend>
+                                                            <div class="water-modal-grid">
+                                                                <div class="field"><label>UFC/piastra</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][coliform_plate_cfu]" value="{{ old("points.{$point->id}.coliform_plate_cfu", data_get($pointResult, 'coliform_plate_cfu')) }}"></div>
+                                                                <div class="field"><label>UFC confermate</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][coliform_confirmed_cfu]" value="{{ old("points.{$point->id}.coliform_confirmed_cfu", data_get($pointResult, 'coliform_confirmed_cfu')) }}"></div>
+                                                                <div class="field"><label>UFC/100 ml</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][coliform_cfu_per_100ml]" value="{{ old("points.{$point->id}.coliform_cfu_per_100ml", data_get($pointResult, 'coliform_cfu_per_100ml')) }}"></div>
+                                                            </div>
+                                                        </fieldset>
+
+                                                        <fieldset class="water-result-group">
+                                                            <legend>Pseudomonas aeruginosa</legend>
+                                                            <div class="water-modal-grid">
+                                                                <div class="field"><label>UFC/piastra</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][pseudomonas_plate_cfu]" value="{{ old("points.{$point->id}.pseudomonas_plate_cfu", data_get($pointResult, 'pseudomonas_plate_cfu')) }}"></div>
+                                                                <div class="field"><label>UFC confermate</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][pseudomonas_confirmed_cfu]" value="{{ old("points.{$point->id}.pseudomonas_confirmed_cfu", data_get($pointResult, 'pseudomonas_confirmed_cfu')) }}"></div>
+                                                                <div class="field"><label>UFC/100 ml</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][pseudomonas_cfu_per_100ml]" value="{{ old("points.{$point->id}.pseudomonas_cfu_per_100ml", data_get($pointResult, 'pseudomonas_cfu_per_100ml')) }}"></div>
+                                                            </div>
+                                                        </fieldset>
+
+                                                        <fieldset class="water-result-group">
+                                                            <legend>Enterococchi</legend>
+                                                            <div class="water-modal-grid">
+                                                                <div class="field"><label>UFC/piastra</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][enterococci_plate_cfu]" value="{{ old("points.{$point->id}.enterococci_plate_cfu", data_get($pointResult, 'enterococci_plate_cfu')) }}"></div>
+                                                                <div class="field"><label>UFC confermate</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][enterococci_confirmed_cfu]" value="{{ old("points.{$point->id}.enterococci_confirmed_cfu", data_get($pointResult, 'enterococci_confirmed_cfu')) }}"></div>
+                                                                <div class="field"><label>UFC/100 ml</label><input type="number" min="0" data-water-result-input name="points[{{ $point->id }}][enterococci_cfu_per_100ml]" value="{{ old("points.{$point->id}.enterococci_cfu_per_100ml", data_get($pointResult, 'enterococci_cfu_per_100ml')) }}"></div>
+                                                            </div>
+                                                        </fieldset>
+
+                                                        <div class="water-modal-grid">
+                                                            <div class="field">
+                                                                <label>pH</label>
+                                                                <input type="text" data-water-result-input name="points[{{ $point->id }}][ph_value]" value="{{ old("points.{$point->id}.ph_value", data_get($pointResult, 'ph_value')) }}" maxlength="20">
+                                                            </div>
+                                                            <div class="field">
+                                                                <label>Aspetto</label>
+                                                                <select data-water-result-input name="points[{{ $point->id }}][appearance_result]">
+                                                                    <option value="">-</option>
+                                                                    <option value="conforme" @selected(old("points.{$point->id}.appearance_result", data_get($pointResult, 'appearance_result')) === 'conforme')>Conforme</option>
+                                                                    <option value="non_conforme" @selected(old("points.{$point->id}.appearance_result", data_get($pointResult, 'appearance_result')) === 'non_conforme')>Non conforme</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="field">
+                                                                <label>Risultato finale</label>
+                                                                <select data-water-result-input name="points[{{ $point->id }}][final_result]">
+                                                                    <option value="">-</option>
+                                                                    <option value="conforme" @selected(old("points.{$point->id}.final_result", data_get($pointResult, 'final_result')) === 'conforme')>Conforme</option>
+                                                                    <option value="non_conforme" @selected(old("points.{$point->id}.final_result", data_get($pointResult, 'final_result')) === 'non_conforme')>Non conforme</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="actions">
+                                                            <span class="hint">I dati restano modificabili fino al salvataggio del campionamento.</span>
+                                                            <button type="button" data-water-close>Conferma punto</button>
+                                                        </div>
+                                                    </div>
+                                                </dialog>
+                                            @endforeach
+                                        @endforeach
+                                    </div>
+                                @else
                                 <div class="table-scroll">
-                                    <table @if ($currentEnvironment === 'acque') data-water-phase-table data-section-id="{{ $section->id }}" @endif>
+                                    <table>
                                         <thead>
                                         @if ($currentEnvironment === 'acque')
                                             <tr>
-                                                <th data-water-col="legacy">ID legacy</th>
-                                                <th data-water-col="description">Descrizione punto</th>
-                                                <th data-water-col="sample_kind">Tipologia</th>
-                                                <th data-water-col="department">Reparto</th>
-                                                <th data-water-col="area">Dove si trova</th>
-                                                <th data-water-col="cfu">Aerobi Totali (UFC/ml)</th>
-                                                <th data-water-col="coliform">Coliformi</th>
-                                                <th data-water-col="pseudomonas">Pseudomonas</th>
-                                                <th data-water-col="enterococci">Enterococchi</th>
-                                                <th data-water-col="ph">pH</th>
-                                                <th data-water-col="point_notes">Note</th>
+                                                <th rowspan="2">Punto</th>
+                                                <th colspan="2">Microrganismi Aerobi Totali</th>
+                                                <th colspan="3">Coliformi Totali</th>
+                                                <th colspan="3"><em>Pseudomonas aeruginosa</em></th>
+                                                <th colspan="3">Enterococchi</th>
+                                                <th rowspan="2">pH</th>
+                                                <th rowspan="2">Aspetto</th>
+                                                <th rowspan="2">Risultato finale</th>
+                                            </tr>
+                                            <tr>
+                                                <th>UFC/piastra</th>
+                                                <th>UFC/ml</th>
+                                                <th>UFC/piastra</th>
+                                                <th>UFC confermate</th>
+                                                <th>UFC/100 ml</th>
+                                                <th>UFC/piastra</th>
+                                                <th>UFC confermate</th>
+                                                <th>UFC/100 ml</th>
+                                                <th>UFC/piastra</th>
+                                                <th>UFC confermate</th>
+                                                <th>UFC/100 ml</th>
                                             </tr>
                                         @else
                                             <tr>
@@ -1429,46 +1896,65 @@
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
                                             <tr class="group-row">
-                                                <td colspan="{{ $currentEnvironment === 'acque' ? 11 : 10 }}">Reparto: {{ $departmentName }}</td>
+                                                <td colspan="{{ $currentEnvironment === 'acque' ? 15 : 10 }}">Reparto: {{ $departmentName }}</td>
                                             </tr>
 
                                             @foreach ($points as $point)
                                                 <tr>
                                                     @if ($currentEnvironment === 'acque')
-                                                        <td data-water-col="legacy">{{ $point->legacy_code ?: '-' }}</td>
-                                                        <td data-water-col="description">{{ $point->title }}</td>
-                                                        <td data-water-col="sample_kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</td>
-                                                        <td data-water-col="department">{{ $point->department?->name ?: 'Senza reparto' }}</td>
-                                                        <td data-water-col="area">{{ $point->area_label ?: '-' }}</td>
-                                                        <td data-water-col="cfu">
-                                                            <input type="number" min="0" name="points[{{ $point->id }}][cfu_count]" value="{{ old("points.{$point->id}.cfu_count", data_get($editingPointResults->get($point->id), 'cfu_count')) }}">
+                                                        <td>
+                                                            <strong>{{ $point->legacy_code ?: '-' }}</strong>
+                                                            <div class="kind">{{ $point->title }}</div>
                                                         </td>
-                                                        <td data-water-col="coliform">
-                                                            <select name="points[{{ $point->id }}][coliform_result]">
-                                                                <option value="">-</option>
-                                                                <option value="present" @selected(old("points.{$point->id}.coliform_result", data_get($editingPointResults->get($point->id), 'coliform_result')) === 'present')>Presente</option>
-                                                                <option value="not_present" @selected(old("points.{$point->id}.coliform_result", data_get($editingPointResults->get($point->id), 'coliform_result')) === 'not_present')>Non presente</option>
-                                                            </select>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][aerobic_plate_cfu]" value="{{ old("points.{$point->id}.aerobic_plate_cfu", data_get($editingPointResults->get($point->id), 'aerobic_plate_cfu')) }}">
                                                         </td>
-                                                        <td data-water-col="pseudomonas">
-                                                            <select name="points[{{ $point->id }}][pseudomonas_result]">
-                                                                <option value="">-</option>
-                                                                <option value="present" @selected(old("points.{$point->id}.pseudomonas_result", data_get($editingPointResults->get($point->id), 'pseudomonas_result')) === 'present')>Presente</option>
-                                                                <option value="not_present" @selected(old("points.{$point->id}.pseudomonas_result", data_get($editingPointResults->get($point->id), 'pseudomonas_result')) === 'not_present')>Non presente</option>
-                                                            </select>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][aerobic_cfu_per_ml]" value="{{ old("points.{$point->id}.aerobic_cfu_per_ml", data_get($editingPointResults->get($point->id), 'aerobic_cfu_per_ml')) }}">
                                                         </td>
-                                                        <td data-water-col="enterococci">
-                                                            <select name="points[{{ $point->id }}][enterococci_result]">
-                                                                <option value="">-</option>
-                                                                <option value="present" @selected(old("points.{$point->id}.enterococci_result", data_get($editingPointResults->get($point->id), 'enterococci_result')) === 'present')>Presente</option>
-                                                                <option value="not_present" @selected(old("points.{$point->id}.enterococci_result", data_get($editingPointResults->get($point->id), 'enterococci_result')) === 'not_present')>Non presente</option>
-                                                            </select>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][coliform_plate_cfu]" value="{{ old("points.{$point->id}.coliform_plate_cfu", data_get($editingPointResults->get($point->id), 'coliform_plate_cfu')) }}">
                                                         </td>
-                                                        <td data-water-col="ph">
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][coliform_confirmed_cfu]" value="{{ old("points.{$point->id}.coliform_confirmed_cfu", data_get($editingPointResults->get($point->id), 'coliform_confirmed_cfu')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][coliform_cfu_per_100ml]" value="{{ old("points.{$point->id}.coliform_cfu_per_100ml", data_get($editingPointResults->get($point->id), 'coliform_cfu_per_100ml')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][pseudomonas_plate_cfu]" value="{{ old("points.{$point->id}.pseudomonas_plate_cfu", data_get($editingPointResults->get($point->id), 'pseudomonas_plate_cfu')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][pseudomonas_confirmed_cfu]" value="{{ old("points.{$point->id}.pseudomonas_confirmed_cfu", data_get($editingPointResults->get($point->id), 'pseudomonas_confirmed_cfu')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][pseudomonas_cfu_per_100ml]" value="{{ old("points.{$point->id}.pseudomonas_cfu_per_100ml", data_get($editingPointResults->get($point->id), 'pseudomonas_cfu_per_100ml')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][enterococci_plate_cfu]" value="{{ old("points.{$point->id}.enterococci_plate_cfu", data_get($editingPointResults->get($point->id), 'enterococci_plate_cfu')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][enterococci_confirmed_cfu]" value="{{ old("points.{$point->id}.enterococci_confirmed_cfu", data_get($editingPointResults->get($point->id), 'enterococci_confirmed_cfu')) }}">
+                                                        </td>
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][enterococci_cfu_per_100ml]" value="{{ old("points.{$point->id}.enterococci_cfu_per_100ml", data_get($editingPointResults->get($point->id), 'enterococci_cfu_per_100ml')) }}">
+                                                        </td>
+                                                        <td>
                                                             <input type="text" name="points[{{ $point->id }}][ph_value]" value="{{ old("points.{$point->id}.ph_value", data_get($editingPointResults->get($point->id), 'ph_value')) }}" maxlength="20">
                                                         </td>
-                                                        <td data-water-col="point_notes">
-                                                            <input type="text" name="points[{{ $point->id }}][notes]" value="{{ old("points.{$point->id}.notes", data_get($editingPointResults->get($point->id), 'notes')) }}" maxlength="500">
+                                                        <td>
+                                                            <select name="points[{{ $point->id }}][appearance_result]">
+                                                                <option value="">-</option>
+                                                                <option value="conforme" @selected(old("points.{$point->id}.appearance_result", data_get($editingPointResults->get($point->id), 'appearance_result')) === 'conforme')>Conforme</option>
+                                                                <option value="non_conforme" @selected(old("points.{$point->id}.appearance_result", data_get($editingPointResults->get($point->id), 'appearance_result')) === 'non_conforme')>Non conforme</option>
+                                                            </select>
+                                                        </td>
+                                                        <td>
+                                                            <select name="points[{{ $point->id }}][final_result]">
+                                                                <option value="">-</option>
+                                                                <option value="conforme" @selected(old("points.{$point->id}.final_result", data_get($editingPointResults->get($point->id), 'final_result')) === 'conforme')>Conforme</option>
+                                                                <option value="non_conforme" @selected(old("points.{$point->id}.final_result", data_get($editingPointResults->get($point->id), 'final_result')) === 'non_conforme')>Non conforme</option>
+                                                            </select>
                                                         </td>
                                                     @else
                                                         <td>{{ $point->legacy_code ?: '-' }}</td>
@@ -1513,13 +1999,14 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                @endif
 
-                                <div class="field" style="margin-top: 12px;">
+                                <div class="field" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
                                 </div>
 
-                                <div class="actions">
+                                <div class="actions" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                     <p class="hint">Salvataggio puntuale per singola sezione.</p>
                                     <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
                                 </div>
@@ -1579,56 +2066,89 @@
             syncAnchorOptions();
         });
 
-        document.querySelectorAll('[data-water-phase]').forEach(function (phaseSelect) {
-            var sectionId = phaseSelect.getAttribute('data-section-id');
-            var table = document.querySelector('[data-water-phase-table][data-section-id="' + sectionId + '"]');
+        document.querySelectorAll('[data-water-wizard]').forEach(function (wizard) {
+            var form = wizard.closest('form');
+            var nextButton = wizard.querySelector('[data-water-next]');
+            var previousButton = wizard.querySelector('[data-water-previous]');
+            var indicator = wizard.querySelector('[data-water-step-indicator]');
+            var resultFields = form.querySelectorAll('[data-water-step-content="results"]');
 
-            if (!table) {
+            var setStep = function (step) {
+                var isResultsStep = step === 'results';
+
+                resultFields.forEach(function (field) {
+                    field.hidden = !isResultsStep;
+                });
+
+                nextButton.hidden = isResultsStep;
+                previousButton.hidden = !isResultsStep;
+                indicator.textContent = isResultsStep ? '2 di 2' : '1 di 2';
+            };
+
+            nextButton.addEventListener('click', function () {
+                var requiredInput = form.querySelector('[name="sampled_on"]');
+
+                if (!requiredInput.reportValidity()) {
+                    return;
+                }
+
+                setStep('results');
+            });
+
+            previousButton.addEventListener('click', function () {
+                setStep('sampling');
+            });
+
+            setStep('sampling');
+        });
+
+        document.querySelectorAll('[data-water-dialog]').forEach(function (dialog) {
+            var pointId = dialog.getAttribute('data-point-id');
+            var card = document.querySelector('[data-water-open="' + dialog.id + '"]');
+
+            if (!card) {
                 return;
             }
 
-            var phaseStorageKey = 'water_phase_section_' + sectionId;
-            var visibilityMap = {
-                campionamento: ['legacy', 'description', 'sample_kind', 'department', 'area'],
-                inserimento_dati: ['legacy', 'cfu', 'coliform', 'pseudomonas', 'enterococci', 'ph', 'point_notes'],
-                modifica: ['legacy', 'description', 'sample_kind', 'department', 'area', 'cfu', 'coliform', 'pseudomonas', 'enterococci', 'ph', 'point_notes'],
-                conferma: ['legacy', 'description', 'sample_kind', 'department', 'area', 'cfu', 'coliform', 'pseudomonas', 'enterococci', 'ph', 'point_notes']
+            var valueFor = function (field) {
+                var input = dialog.querySelector('[name="points[' + pointId + '][' + field + ']"]');
+                return input && input.value !== '' ? input.value : '-';
             };
 
-            var updatePhaseColumns = function (phase) {
-                var visibleColumns = visibilityMap[phase] || visibilityMap.campionamento;
+            var resultLabel = function (field) {
+                var input = dialog.querySelector('[name="points[' + pointId + '][' + field + ']"]');
 
-                table.querySelectorAll('[data-water-col]').forEach(function (cell) {
-                    var key = cell.getAttribute('data-water-col');
-                    var shouldShow = visibleColumns.indexOf(key) !== -1;
-                    cell.style.display = shouldShow ? '' : 'none';
-                });
+                if (!input || input.value === '') {
+                    return '-';
+                }
 
-                table.querySelectorAll('tr.group-row td').forEach(function (groupCell) {
-                    groupCell.colSpan = visibleColumns.length;
-                });
+                return input.value === 'conforme' ? 'Conforme' : 'Non conforme';
             };
 
-            try {
-                var savedPhase = localStorage.getItem(phaseStorageKey);
-                if (savedPhase && visibilityMap[savedPhase]) {
-                    phaseSelect.value = savedPhase;
-                }
-            } catch (error) {
-                // Ignore localStorage restrictions and proceed with selected option.
-            }
+            var updateSummary = function () {
+                card.querySelector('[data-water-summary="aerobic"]').textContent = 'P: ' + valueFor('aerobic_plate_cfu') + ' | ml: ' + valueFor('aerobic_cfu_per_ml');
+                card.querySelector('[data-water-summary="coliform"]').textContent = '100 ml: ' + valueFor('coliform_cfu_per_100ml');
+                card.querySelector('[data-water-summary="pseudomonas"]').textContent = '100 ml: ' + valueFor('pseudomonas_cfu_per_100ml');
+                card.querySelector('[data-water-summary="enterococci"]').textContent = '100 ml: ' + valueFor('enterococci_cfu_per_100ml');
+                card.querySelector('[data-water-summary="final"]').textContent = resultLabel('final_result');
+            };
 
-            updatePhaseColumns(phaseSelect.value);
-
-            phaseSelect.addEventListener('change', function () {
-                updatePhaseColumns(phaseSelect.value);
-
-                try {
-                    localStorage.setItem(phaseStorageKey, phaseSelect.value);
-                } catch (error) {
-                    // Ignore localStorage restrictions.
-                }
+            card.addEventListener('click', function () {
+                dialog.showModal();
             });
+
+            dialog.querySelectorAll('[data-water-close]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    dialog.close();
+                });
+            });
+
+            dialog.querySelectorAll('[data-water-result-input]').forEach(function (input) {
+                input.addEventListener('input', updateSummary);
+                input.addEventListener('change', updateSummary);
+            });
+
+            updateSummary();
         });
     });
 </script>

@@ -51,10 +51,6 @@ class MonitoringController extends Controller
         ];
 
         $subEnvironmentLabels = [
-            'acque' => [
-                's1' => 'Sede 1',
-                's2' => 'Sede 2',
-            ],
             'clean_room' => [
                 's1' => 'S1',
                 's2' => 'S2',
@@ -328,12 +324,15 @@ class MonitoringController extends Controller
     private function buildCheckRules($pointCollection): array
     {
         $rules = [
+            'facility_name' => ['nullable', 'string', 'max:120'],
             'sampled_on' => ['required', 'date'],
             'sampled_time' => ['nullable', 'date_format:H:i'],
             'incubation_started_on' => ['nullable', 'date'],
             'first_reading_on' => ['nullable', 'date'],
             'second_reading_on' => ['nullable', 'date'],
             'operator_name' => ['nullable', 'string', 'max:120'],
+            'incubation_started_signature' => ['nullable', 'string', 'max:120'],
+            'incubation_finished_signature' => ['nullable', 'string', 'max:120'],
             'cq_operator_name' => ['nullable', 'string', 'max:120'],
             'product_batch' => ['nullable', 'string', 'max:120'],
             'media_lot' => ['nullable', 'string', 'max:120'],
@@ -341,9 +340,25 @@ class MonitoringController extends Controller
             'membrane_lot' => ['nullable', 'string', 'max:120'],
             'bottle_sterilization_lot' => ['nullable', 'string', 'max:120'],
             'r2a_agar_lot' => ['nullable', 'string', 'max:120'],
+            'r2a_agar_expires_on' => ['nullable', 'date'],
+            'r2a_incubator_code' => ['nullable', 'string', 'max:120'],
+            'r2a_incubation_started_on' => ['nullable', 'date'],
+            'r2a_incubation_finished_on' => ['nullable', 'date'],
             'coliform_agar_lot' => ['nullable', 'string', 'max:120'],
+            'coliform_agar_expires_on' => ['nullable', 'date'],
+            'coliform_incubator_code' => ['nullable', 'string', 'max:120'],
+            'coliform_incubation_started_on' => ['nullable', 'date'],
+            'coliform_incubation_finished_on' => ['nullable', 'date'],
             'pseudomonas_cn_lot' => ['nullable', 'string', 'max:120'],
+            'pseudomonas_cn_expires_on' => ['nullable', 'date'],
+            'pseudomonas_incubator_code' => ['nullable', 'string', 'max:120'],
+            'pseudomonas_incubation_started_on' => ['nullable', 'date'],
+            'pseudomonas_incubation_finished_on' => ['nullable', 'date'],
             'slanetz_bartley_lot' => ['nullable', 'string', 'max:120'],
+            'slanetz_bartley_expires_on' => ['nullable', 'date'],
+            'enterococci_incubator_code' => ['nullable', 'string', 'max:120'],
+            'enterococci_incubation_started_on' => ['nullable', 'date'],
+            'enterococci_incubation_finished_on' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:4000'],
             'points' => ['required', 'array'],
         ];
@@ -371,10 +386,20 @@ class MonitoringController extends Controller
             }
 
             if ($point->sample_kind === 'water') {
-                $rules["{$prefix}.coliform_result"] = ['nullable', 'in:present,not_present'];
-                $rules["{$prefix}.pseudomonas_result"] = ['nullable', 'in:present,not_present'];
-                $rules["{$prefix}.enterococci_result"] = ['nullable', 'in:present,not_present'];
+                $rules["{$prefix}.aerobic_plate_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.aerobic_cfu_per_ml"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.coliform_plate_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.coliform_confirmed_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.coliform_cfu_per_100ml"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.pseudomonas_plate_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.pseudomonas_confirmed_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.pseudomonas_cfu_per_100ml"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.enterococci_plate_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.enterococci_confirmed_cfu"] = ['nullable', 'integer', 'min:0'];
+                $rules["{$prefix}.enterococci_cfu_per_100ml"] = ['nullable', 'integer', 'min:0'];
                 $rules["{$prefix}.ph_value"] = ['nullable', 'string', 'max:20'];
+                $rules["{$prefix}.appearance_result"] = ['nullable', 'in:conforme,non_conforme'];
+                $rules["{$prefix}.final_result"] = ['nullable', 'in:conforme,non_conforme'];
             }
 
             if ($point->requires_operational_status) {
@@ -395,12 +420,15 @@ class MonitoringController extends Controller
     private function persistCheck(MicrobiologicalCheck $check, array $data, $pointCollection): void
     {
         $check->update([
+            'facility_name' => $data['facility_name'] ?? null,
             'sampled_on' => $data['sampled_on'],
             'sampled_time' => $data['sampled_time'] ?? null,
             'incubation_started_on' => $data['incubation_started_on'] ?? null,
             'first_reading_on' => $data['first_reading_on'] ?? null,
             'second_reading_on' => $data['second_reading_on'] ?? null,
             'operator_name' => $data['operator_name'] ?? null,
+            'incubation_started_signature' => $data['incubation_started_signature'] ?? null,
+            'incubation_finished_signature' => $data['incubation_finished_signature'] ?? null,
             'cq_operator_name' => $data['cq_operator_name'] ?? null,
             'product_batch' => $data['product_batch'] ?? null,
             'media_lot' => $data['media_lot'] ?? null,
@@ -408,9 +436,25 @@ class MonitoringController extends Controller
             'membrane_lot' => $data['membrane_lot'] ?? null,
             'bottle_sterilization_lot' => $data['bottle_sterilization_lot'] ?? null,
             'r2a_agar_lot' => $data['r2a_agar_lot'] ?? null,
+            'r2a_agar_expires_on' => $data['r2a_agar_expires_on'] ?? null,
+            'r2a_incubator_code' => $data['r2a_incubator_code'] ?? null,
+            'r2a_incubation_started_on' => $data['r2a_incubation_started_on'] ?? null,
+            'r2a_incubation_finished_on' => $data['r2a_incubation_finished_on'] ?? null,
             'coliform_agar_lot' => $data['coliform_agar_lot'] ?? null,
+            'coliform_agar_expires_on' => $data['coliform_agar_expires_on'] ?? null,
+            'coliform_incubator_code' => $data['coliform_incubator_code'] ?? null,
+            'coliform_incubation_started_on' => $data['coliform_incubation_started_on'] ?? null,
+            'coliform_incubation_finished_on' => $data['coliform_incubation_finished_on'] ?? null,
             'pseudomonas_cn_lot' => $data['pseudomonas_cn_lot'] ?? null,
+            'pseudomonas_cn_expires_on' => $data['pseudomonas_cn_expires_on'] ?? null,
+            'pseudomonas_incubator_code' => $data['pseudomonas_incubator_code'] ?? null,
+            'pseudomonas_incubation_started_on' => $data['pseudomonas_incubation_started_on'] ?? null,
+            'pseudomonas_incubation_finished_on' => $data['pseudomonas_incubation_finished_on'] ?? null,
             'slanetz_bartley_lot' => $data['slanetz_bartley_lot'] ?? null,
+            'slanetz_bartley_expires_on' => $data['slanetz_bartley_expires_on'] ?? null,
+            'enterococci_incubator_code' => $data['enterococci_incubator_code'] ?? null,
+            'enterococci_incubation_started_on' => $data['enterococci_incubation_started_on'] ?? null,
+            'enterococci_incubation_finished_on' => $data['enterococci_incubation_finished_on'] ?? null,
             'notes' => $data['notes'] ?? null,
         ]);
 
@@ -442,16 +486,30 @@ class MonitoringController extends Controller
                 'product_lot' => $pointInput['product_lot'] ?? null,
                 'cfu_count' => $pointInput['second_cfu_count']
                     ?? $pointInput['cfu_count']
+                    ?? $pointInput['aerobic_cfu_per_ml']
                     ?? $pointInput['first_cfu_count']
                     ?? null,
+                'aerobic_plate_cfu' => $pointInput['aerobic_plate_cfu'] ?? null,
+                'aerobic_cfu_per_ml' => $pointInput['aerobic_cfu_per_ml'] ?? null,
                 'first_cfu_count' => $pointInput['first_cfu_count'] ?? null,
                 'second_cfu_count' => $pointInput['second_cfu_count'] ?? null,
                 'first_growth_result' => $pointInput['first_growth_result'] ?? null,
                 'second_growth_result' => $pointInput['second_growth_result'] ?? null,
                 'coliform_result' => $pointInput['coliform_result'] ?? null,
+                'coliform_plate_cfu' => $pointInput['coliform_plate_cfu'] ?? null,
+                'coliform_confirmed_cfu' => $pointInput['coliform_confirmed_cfu'] ?? null,
+                'coliform_cfu_per_100ml' => $pointInput['coliform_cfu_per_100ml'] ?? null,
                 'pseudomonas_result' => $pointInput['pseudomonas_result'] ?? null,
+                'pseudomonas_plate_cfu' => $pointInput['pseudomonas_plate_cfu'] ?? null,
+                'pseudomonas_confirmed_cfu' => $pointInput['pseudomonas_confirmed_cfu'] ?? null,
+                'pseudomonas_cfu_per_100ml' => $pointInput['pseudomonas_cfu_per_100ml'] ?? null,
                 'enterococci_result' => $pointInput['enterococci_result'] ?? null,
+                'enterococci_plate_cfu' => $pointInput['enterococci_plate_cfu'] ?? null,
+                'enterococci_confirmed_cfu' => $pointInput['enterococci_confirmed_cfu'] ?? null,
+                'enterococci_cfu_per_100ml' => $pointInput['enterococci_cfu_per_100ml'] ?? null,
                 'ph_value' => $pointInput['ph_value'] ?? null,
+                'appearance_result' => $pointInput['appearance_result'] ?? null,
+                'final_result' => $pointInput['final_result'] ?? null,
                 'notes' => $pointInput['notes'] ?? null,
             ];
 
