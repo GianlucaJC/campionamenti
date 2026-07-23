@@ -2073,6 +2073,29 @@
             var indicator = wizard.querySelector('[data-water-step-indicator]');
             var resultFields = form.querySelectorAll('[data-water-step-content="results"]');
 
+            form.noValidate = true;
+
+            form.addEventListener('submit', function (event) {
+                var invalidField = Array.from(form.elements).find(function (field) {
+                    return field.willValidate && !field.validity.valid;
+                });
+
+                if (!invalidField) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                var dialog = invalidField.closest('[data-water-dialog]');
+
+                if (dialog && !dialog.open) {
+                    dialog.showModal();
+                }
+
+                invalidField.focus();
+                invalidField.reportValidity();
+            });
+
             var setStep = function (step) {
                 var isResultsStep = step === 'results';
 
