@@ -857,7 +857,7 @@
         }
     </style>
 </head>
-<body>
+<body data-server-time="{{ now()->format('H:i') }}">
 <div class="wrap">
     <header class="hero">
         <div class="hero-top">
@@ -2115,6 +2115,16 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var serverTime = document.body.dataset.serverTime;
+
+        document.addEventListener('focusin', function (event) {
+            var timeInput = event.target;
+
+            if (timeInput.matches('input[type="time"]') && timeInput.value === '') {
+                timeInput.value = serverTime;
+            }
+        });
+
         document.querySelectorAll('[data-department-select]').forEach(function (departmentSelect) {
             var sectionId = departmentSelect.getAttribute('data-section-id');
             var anchorSelect = document.querySelector('[data-anchor-select][data-section-id="' + sectionId + '"]');
