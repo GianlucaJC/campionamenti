@@ -1614,7 +1614,7 @@
                                     @method('PATCH')
                                 @endif
 
-                                @if ($currentEnvironment === 'produzione')
+                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
                                 @endif
 
@@ -1636,7 +1636,7 @@
                                         <label for="incubation_started_on_{{ $section->id }}">Inizio incubazione</label>
                                         <input id="incubation_started_on_{{ $section->id }}" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', $isEditingSection ? $editingCheck->incubation_started_on : null) }}">
                                     </div>
-                                    @if ($currentEnvironment !== 'produzione')
+                                    @if (! in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                         <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                             <label for="first_reading_on_{{ $section->id }}">1a lettura</label>
                                             <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $isEditingSection ? $editingCheck->first_reading_on : null) }}">
@@ -1697,7 +1697,7 @@
                                             <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $isEditingSection ? $editingCheck->swab_lot : null) }}" maxlength="120">
                                         </div>
                                     @endif
-                                    @if ($currentEnvironment === 'produzione' && $isEditingSection)
+                                    @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $isEditingSection)
                                         <div class="field" style="align-self: end;">
                                             <button type="submit" name="save_header" value="1">Salva intestazione</button>
                                         </div>
@@ -1823,11 +1823,11 @@
                                         @endforeach
                                     </div>
                                 @else
-                                @if ($currentEnvironment === 'produzione')
+                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
                                         @foreach ($productionPhases as $phaseKey => $phaseLabel)
                                             @if ($phaseKey === 'sampling' || ($phaseKey === 'first_reading' && filled($editingCheck?->sampling_completed_by_user_id)) || ($phaseKey === 'second_reading' && filled($editingCheck?->first_reading_completed_by_user_id)))
-                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'produzione', 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
@@ -1835,7 +1835,7 @@
                                     </div>
                                 @endif
 
-                                @if ($currentEnvironment === 'produzione')
+                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     @if ($productionPhase === 'sampling')
                                         @php($phaseSignerId = $editingCheck?->sampling_completed_by_user_id)
                                         @php($phaseReopenedAt = $editingCheck?->sampling_reopened_at)
@@ -1849,7 +1849,7 @@
                                     @php($productionPhaseLocked = filled($phaseSignerId) && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id()))
                                 @endif
 
-                                <div class="table-scroll @if ($currentEnvironment === 'produzione' && $productionPhaseLocked) production-phase-locked @endif">
+                                <div class="table-scroll @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif">
                                     <table>
                                         <thead>
                                         @if ($currentEnvironment === 'acque')
@@ -1876,7 +1876,7 @@
                                                 <th>UFC confermate</th>
                                                 <th>UFC/100 ml</th>
                                             </tr>
-                                        @elseif ($currentEnvironment === 'produzione')
+                                        @elseif (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Descrizione punto</th>
@@ -1884,12 +1884,14 @@
                                                 <th>Area dettagliata</th>
                                                 @if ($productionPhase === 'sampling')
                                                     <th>Ora</th>
-                                                    <th>Operativo</th>
-                                                    <th>Lotto prodotto</th>
+                                                    @if ($currentEnvironment === 'produzione')
+                                                        <th>Operativo</th>
+                                                        <th>Lotto prodotto</th>
+                                                    @endif
                                                 @elseif ($productionPhase === 'first_reading')
-                                                    <th>UFC/m3 (prima lettura)</th>
+                                                    <th>{{ $currentEnvironment === 'produzione' ? 'UFC/m3' : 'UFC/piastra' }} (prima lettura)</th>
                                                 @else
-                                                    <th>UFC/m3 (seconda lettura)</th>
+                                                    <th>{{ $currentEnvironment === 'produzione' ? 'UFC/m3' : 'UFC/piastra' }} (seconda lettura)</th>
                                                 @endif
                                             </tr>
                                         @else
@@ -1910,7 +1912,7 @@
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
                                             <tr class="group-row">
-                                                <td colspan="{{ $currentEnvironment === 'acque' ? 15 : ($currentEnvironment === 'produzione' ? ($productionPhase === 'sampling' ? 7 : 5) : 10) }}">Reparto: {{ $departmentName }}</td>
+                                                <td colspan="{{ $currentEnvironment === 'acque' ? 15 : (in_array($currentEnvironment, ['produzione', 'operatori'], true) ? ($productionPhase === 'sampling' ? ($currentEnvironment === 'produzione' ? 7 : 5) : 5) : 10) }}">Reparto: {{ $departmentName }}</td>
                                             </tr>
 
                                             @foreach ($points as $point)
@@ -1970,7 +1972,7 @@
                                                                 <option value="non_conforme" @selected(old("points.{$point->id}.final_result", data_get($editingPointResults->get($point->id), 'final_result')) === 'non_conforme')>Non conforme</option>
                                                             </select>
                                                         </td>
-                                                    @elseif ($currentEnvironment === 'produzione')
+                                                    @elseif (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                                         <td>{{ $point->legacy_code ?: '-' }}</td>
                                                         <td>
                                                             {{ $point->title }}
@@ -1982,24 +1984,26 @@
                                                             <td>
                                                                 <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ substr((string) old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')), 0, 5) }}">
                                                             </td>
-                                                            <td>
-                                                                @if ($point->requires_operational_status)
-                                                                    <select name="points[{{ $point->id }}][is_operational]" data-production-operational>
-                                                                        <option value="">-</option>
-                                                                        <option value="1" @selected((string) old("points.{$point->id}.is_operational", data_get($editingPointResults->get($point->id), 'is_operational')) === '1')>Si</option>
-                                                                        <option value="0" @selected((string) old("points.{$point->id}.is_operational", data_get($editingPointResults->get($point->id), 'is_operational')) === '0')>No</option>
-                                                                    </select>
-                                                                @else
-                                                                    -
-                                                                @endif
-                                                            </td>
-                                                            <td data-production-product-lot hidden>
-                                                                @if ($point->requires_product_lot && $point->requires_operational_status)
-                                                                    <input type="text" name="points[{{ $point->id }}][product_lot]" value="{{ old("points.{$point->id}.product_lot", data_get($editingPointResults->get($point->id), 'product_lot')) }}" maxlength="120" disabled>
-                                                                @else
-                                                                    -
-                                                                @endif
-                                                            </td>
+                                                            @if ($currentEnvironment === 'produzione')
+                                                                <td>
+                                                                    @if ($point->requires_operational_status)
+                                                                        <select name="points[{{ $point->id }}][is_operational]" data-production-operational>
+                                                                            <option value="">-</option>
+                                                                            <option value="1" @selected((string) old("points.{$point->id}.is_operational", data_get($editingPointResults->get($point->id), 'is_operational')) === '1')>Si</option>
+                                                                            <option value="0" @selected((string) old("points.{$point->id}.is_operational", data_get($editingPointResults->get($point->id), 'is_operational')) === '0')>No</option>
+                                                                        </select>
+                                                                    @else
+                                                                        -
+                                                                    @endif
+                                                                </td>
+                                                                <td data-production-product-lot hidden>
+                                                                    @if ($point->requires_product_lot && $point->requires_operational_status)
+                                                                        <input type="text" name="points[{{ $point->id }}][product_lot]" value="{{ old("points.{$point->id}.product_lot", data_get($editingPointResults->get($point->id), 'product_lot')) }}" maxlength="120" disabled>
+                                                                    @else
+                                                                        -
+                                                                    @endif
+                                                                </td>
+                                                            @endif
                                                         @elseif ($productionPhase === 'first_reading')
                                                             <td>
                                                                 <input type="number" min="0" name="points[{{ $point->id }}][first_cfu_count]" value="{{ old("points.{$point->id}.first_cfu_count", data_get($editingPointResults->get($point->id), 'first_cfu_count')) }}">
@@ -2054,7 +2058,7 @@
                                 </div>
                                 @endif
 
-                                @if ($currentEnvironment === 'produzione')
+                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     @if ($productionPhase === 'sampling')
                                         @php($phaseSigned = filled($editingCheck?->sampling_completed_by_user_id))
                                     @elseif ($productionPhase === 'first_reading')
@@ -2064,12 +2068,12 @@
                                     @endif
                                 @endif
 
-                                <div class="field @if ($currentEnvironment === 'produzione' && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
+                                <div class="field @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
                                 </div>
 
-                                @if ($currentEnvironment === 'produzione' && $productionPhaseLocked)
+                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked)
                                     <div class="actions">
                                         @if ((int) $phaseSignerId === (int) auth()->id() && ! filled($phaseReopenedAt))
                                             <div class="field" style="min-width: min(100%, 360px);">
@@ -2085,7 +2089,7 @@
                                     <div class="actions" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <p class="hint">Salvataggio puntuale per singola sezione.</p>
                                         <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
-                                        @if ($currentEnvironment === 'produzione' && (! $phaseSigned || filled($phaseReopenedAt)))
+                                        @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && (! $phaseSigned || filled($phaseReopenedAt)))
                                             <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }}</button>
                                         @endif
                                     </div>

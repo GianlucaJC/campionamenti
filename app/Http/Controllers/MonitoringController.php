@@ -98,8 +98,8 @@ class MonitoringController extends Controller
         $currentSubEnvironment = null;
         $productionPhases = [
             'sampling' => 'Fase campionamento',
-            'first_reading' => 'Prima lettura UFC/m3',
-            'second_reading' => 'Seconda lettura UFC/m3',
+            'first_reading' => 'Prima lettura',
+            'second_reading' => 'Seconda lettura',
         ];
         $productionPhase = (string) $request->query('phase', 'sampling');
 
@@ -513,7 +513,7 @@ class MonitoringController extends Controller
 
     private function isPhasedEnvironment(MonitoringSection $section): bool
     {
-        return in_array($section->environment ?: 'produzione', ['produzione', 'clean_room'], true);
+        return in_array($section->environment ?: 'produzione', ['produzione', 'clean_room', 'operatori'], true);
     }
 
     /**
