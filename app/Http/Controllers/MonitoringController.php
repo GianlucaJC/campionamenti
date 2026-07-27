@@ -280,11 +280,15 @@ class MonitoringController extends Controller
 
         $this->normalizeTimeInputs($request, $pointCollection);
         $data = $request->validate($this->buildCheckRules($pointCollection));
-        $this->ensureProductionPhaseCanBeAccessed($data);
         $userId = (int) Auth::id();
-        $this->addProductionPhaseSigner($data, $userId);
+        $isPhasedEnvironment = $this->isPhasedEnvironment($section);
 
-        $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId): int {
+        if ($isPhasedEnvironment) {
+            $this->ensureProductionPhaseCanBeAccessed($data);
+            $this->addProductionPhaseSigner($data, $userId);
+        }
+
+        $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId, $isPhasedEnvironment): int {
             $check = MicrobiologicalCheck::query()->create([
                 'monitoring_section_id' => $section->id,
                 'sampled_on' => $data['sampled_on'],
@@ -292,7 +296,9 @@ class MonitoringController extends Controller
             ]);
 
             $this->persistCheck($check, $data, $pointCollection);
-            $this->recordProductionPhaseLog($check, $data, $userId);
+            if ($isPhasedEnvironment) {
+                $this->recordProductionPhaseLog($check, $data, $userId);
+            }
 
             return $check->id;
         });
@@ -332,7 +338,9 @@ class MonitoringController extends Controller
         $this->normalizeTimeInputs($request, $pointCollection);
         $data = $request->validate($this->buildCheckRules($pointCollection));
 
-        if (! empty($data['save_header']) && ! empty($data['entry_phase'])) {
+        $isPhasedEnvironment = $this->isPhasedEnvironment($section);
+
+        if ($isPhasedEnvironment && ! empty($data['save_header']) && ! empty($data['entry_phase'])) {
             $this->persistCheckHeader($check, $data);
 
             return redirect()
@@ -346,8 +354,23 @@ class MonitoringController extends Controller
                 ->with('status', "Intestazione della sezione '{$section->name}' aggiornata con successo.");
         }
 
-        $this->ensureProductionPhaseCanBeAccessed($data, $check);
         $userId = (int) Auth::id();
+        if (! $isPhasedEnvironment) {
+            DB::transaction(function () use ($check, $data, $pointCollection): void {
+                $this->persistCheck($check, $data, $pointCollection);
+            });
+
+            return redirect()
+                ->route('monitoraggi.index', array_filter([
+                    'view' => 'nuovo',
+                    'env' => $section->environment ?: 'produzione',
+                    'sub' => $section->sub_environment ?: null,
+                    'edit_check' => $check->id,
+                ]))
+                ->with('status', "Sezione '{$section->name}' aggiornata con successo.");
+        }
+
+        $this->ensureProductionPhaseCanBeAccessed($data, $check);
         $isReopening = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
 
         if ($isReopening) {
@@ -486,6 +509,11 @@ class MonitoringController extends Controller
         }
 
         return $rules;
+    }
+
+    private function isPhasedEnvironment(MonitoringSection $section): bool
+    {
+        return in_array($section->environment ?: 'produzione', ['produzione', 'clean_room'], true);
     }
 
     /**
@@ -805,11 +833,17 @@ class MonitoringController extends Controller
             ];
 
             if (($data['entry_phase'] ?? null) === 'sampling') {
-                $payload = array_intersect_key($payload, array_flip([
+                $phaseFields = [
                     'sampled_at',
                     'is_operational',
                     'product_lot',
-                ]));
+                ];
+
+                if (($check->section?->environment ?: 'produzione') === 'clean_room') {
+                    $phaseFields[] = 'exposure_ended_at';
+                }
+
+                $payload = array_intersect_key($payload, array_flip($phaseFields));
 
                 if (($pointInput['is_operational'] ?? null) !== '1' && ($pointInput['is_operational'] ?? null) !== 1) {
                     $payload['product_lot'] = null;
@@ -817,12 +851,22 @@ class MonitoringController extends Controller
             }
 
             if (($data['entry_phase'] ?? null) === 'first_reading') {
-                $payload = array_intersect_key($payload, array_flip(['first_cfu_count']));
+                $payload = array_intersect_key($payload, array_flip([
+                    'first_cfu_count',
+                    'first_growth_result',
+                ]));
             }
 
             if (($data['entry_phase'] ?? null) === 'second_reading') {
-                $payload = array_intersect_key($payload, array_flip(['second_cfu_count', 'cfu_count']));
-                $payload['cfu_count'] = $pointInput['second_cfu_count'] ?? null;
+                $payload = array_intersect_key($payload, array_flip([
+                    'second_cfu_count',
+                    'second_growth_result',
+                    'cfu_count',
+                ]));
+
+                if (array_key_exists('second_cfu_count', $pointInput)) {
+                    $payload['cfu_count'] = $pointInput['second_cfu_count'];
+                }
             }
 
             if ($existingResult) {

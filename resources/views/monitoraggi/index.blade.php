@@ -1439,110 +1439,12 @@
                                     @method('PATCH')
                                 @endif
 
-                                @if ($currentEnvironment === 'acque')
-                                    @php
-                                        $waterMedia = [
-                                            ['title' => 'R2A Agar', 'lot' => 'r2a_agar_lot', 'expires' => 'r2a_agar_expires_on', 'incubator' => 'r2a_incubator_code', 'started' => 'r2a_incubation_started_on', 'finished' => 'r2a_incubation_finished_on', 'temperature' => '30-35 °C', 'duration' => '5 giorni'],
-                                            ['title' => 'Chromatic Coliform Agar ISO', 'lot' => 'coliform_agar_lot', 'expires' => 'coliform_agar_expires_on', 'incubator' => 'coliform_incubator_code', 'started' => 'coliform_incubation_started_on', 'finished' => 'coliform_incubation_finished_on', 'temperature' => '36 ± 2 °C', 'duration' => '21 ± 3 h'],
-                                            ['title' => 'Pseudomonas CN Agar', 'lot' => 'pseudomonas_cn_lot', 'expires' => 'pseudomonas_cn_expires_on', 'incubator' => 'pseudomonas_incubator_code', 'started' => 'pseudomonas_incubation_started_on', 'finished' => 'pseudomonas_incubation_finished_on', 'temperature' => '36 ± 2 °C', 'duration' => '44 ± 4 h'],
-                                            ['title' => 'Slanetz and Bartley Medium', 'lot' => 'slanetz_bartley_lot', 'expires' => 'slanetz_bartley_expires_on', 'incubator' => 'enterococci_incubator_code', 'started' => 'enterococci_incubation_started_on', 'finished' => 'enterococci_incubation_finished_on', 'temperature' => '36 ± 2 °C', 'duration' => '44 ± 4 h'],
-                                        ];
-                                    @endphp
-                                    <section class="water-sampling-sheet">
-                                        <h3 class="water-sheet-title">Dati campionamento</h3>
-                                        <div class="water-sheet-header">
-                                            <div class="field">
-                                                <label for="facility_name_{{ $section->id }}">Stabilimento</label>
-                                                <input id="facility_name_{{ $section->id }}" type="text" name="facility_name" value="{{ old('facility_name', $isEditingSection ? $editingCheck->facility_name : null) }}" maxlength="120">
-                                            </div>
-                                            <div class="field">
-                                                <label for="sampled_on_{{ $section->id }}">Data prelievo</label>
-                                                <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $isEditingSection ? $editingCheck->sampled_on : now()->toDateString()) }}" required>
-                                            </div>
-                                            <div class="field">
-                                                <label for="sampled_time_{{ $section->id }}">Ora prelievo</label>
-                                                <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', $isEditingSection ? $editingCheck->sampled_time : null) }}">
-                                            </div>
-                                            <div class="field">
-                                                <label for="membrane_lot_{{ $section->id }}">Lotto membrana filtrante</label>
-                                                <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', $isEditingSection ? $editingCheck->membrane_lot : null) }}" maxlength="120">
-                                            </div>
-                                            <div class="field">
-                                                <label for="bottle_sterilization_lot_{{ $section->id }}">Sterilizzazione materiali</label>
-                                                <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', $isEditingSection ? $editingCheck->bottle_sterilization_lot : null) }}" maxlength="120">
-                                            </div>
-                                        </div>
+                                <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
 
-                                        <div class="water-signature-row">
-                                            <div class="field">
-                                                <label for="operator_name_{{ $section->id }}">Campionatore - firma</label>
-                                                <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : auth()->user()?->name) }}" maxlength="120">
-                                            </div>
-                                            <div class="field" data-water-step-content="results">
-                                                <label for="incubation_started_signature_{{ $section->id }}">Firma inizio incubazione</label>
-                                                <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', $isEditingSection ? $editingCheck->incubation_started_signature : null) }}" maxlength="120">
-                                            </div>
-                                            <div class="field" data-water-step-content="results">
-                                                <label for="incubation_finished_signature_{{ $section->id }}">Firma fine incubazione</label>
-                                                <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', $isEditingSection ? $editingCheck->incubation_finished_signature : null) }}" maxlength="120">
-                                            </div>
-                                        </div>
-
-                                        <div class="water-media-sheet" data-water-step-content="results">
-                                            <div class="water-media-cell water-media-label">Terreno di coltura</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell water-media-heading">{{ $media['title'] }}</div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Lotto</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell"><input type="text" name="{{ $media['lot'] }}" value="{{ old($media['lot'], $isEditingSection ? data_get($editingCheck, $media['lot']) : null) }}" maxlength="120"></div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Scadenza</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell"><input type="date" name="{{ $media['expires'] }}" value="{{ old($media['expires'], $isEditingSection ? data_get($editingCheck, $media['expires']) : null) }}"></div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Temperatura incubazione</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell water-media-fixed">{{ $media['temperature'] }}</div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Tempo di incubazione</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell water-media-fixed">{{ $media['duration'] }}</div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Incubatore (codice)</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell"><input type="text" name="{{ $media['incubator'] }}" value="{{ old($media['incubator'], $isEditingSection ? data_get($editingCheck, $media['incubator']) : null) }}" maxlength="120"></div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Inizio incubazione</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell"><input type="date" name="{{ $media['started'] }}" value="{{ old($media['started'], $isEditingSection ? data_get($editingCheck, $media['started']) : null) }}"></div>
-                                            @endforeach
-                                            <div class="water-media-cell water-media-label">Fine incubazione</div>
-                                            @foreach ($waterMedia as $media)
-                                                <div class="water-media-cell"><input type="date" name="{{ $media['finished'] }}" value="{{ old($media['finished'], $isEditingSection ? data_get($editingCheck, $media['finished']) : null) }}"></div>
-                                            @endforeach
-                                        </div>
-
-                                        <div class="water-signature-row" data-water-step-content="results">
-                                            <div class="field">
-                                                <label for="cq_operator_name_{{ $section->id }}">Controllo qualità</label>
-                                                <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $isEditingSection ? $editingCheck->cq_operator_name : null) }}" maxlength="120">
-                                            </div>
-                                        </div>
-                                    </section>
-                                @else
                                 <div class="meta-grid">
                                     <div class="field">
                                         <label for="sampled_on_{{ $section->id }}">Data prelievo / inizio incubazione</label>
                                         <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $isEditingSection ? $editingCheck->sampled_on : now()->toDateString()) }}" required>
-                                    </div>
-                                    <div class="field">
-                                        <label for="first_reading_on_{{ $section->id }}">Data 1a lettura</label>
-                                        <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $isEditingSection ? $editingCheck->first_reading_on : null) }}">
-                                    </div>
-                                    <div class="field">
-                                        <label for="second_reading_on_{{ $section->id }}">Data 2a lettura</label>
-                                        <input id="second_reading_on_{{ $section->id }}" type="date" name="second_reading_on" value="{{ old('second_reading_on', $isEditingSection ? $editingCheck->second_reading_on : null) }}">
                                     </div>
                                     <div class="field">
                                         <label for="operator_name_{{ $section->id }}">Operatore in clean room</label>
@@ -1567,13 +1469,39 @@
                                             <input id="media_lot_{{ $section->id }}" type="text" name="media_lot" value="{{ old('media_lot', $isEditingSection ? $editingCheck->media_lot : null) }}" maxlength="120">
                                         </div>
                                     @endif
+                                        @if ($isEditingSection)
+                                            <div class="field" style="align-self: end;">
+                                                <button type="submit" name="save_header" value="1">Salva intestazione</button>
+                                            </div>
+                                        @endif
                                 </div>
-                                @endif
 
-                                <div class="table-scroll">
+                                    <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
+                                        @foreach ($productionPhases as $phaseKey => $phaseLabel)
+                                            @if ($phaseKey === 'sampling' || ($phaseKey === 'first_reading' && filled($editingCheck?->sampling_completed_by_user_id)) || ($phaseKey === 'second_reading' && filled($editingCheck?->first_reading_completed_by_user_id)))
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'clean_room', 'sub' => $currentSubEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
+                                            @else
+                                                <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
+                                            @endif
+                                        @endforeach
+                                    </div>
+
+                                    @if ($productionPhase === 'sampling')
+                                        @php($phaseSignerId = $editingCheck?->sampling_completed_by_user_id)
+                                        @php($phaseReopenedAt = $editingCheck?->sampling_reopened_at)
+                                    @elseif ($productionPhase === 'first_reading')
+                                        @php($phaseSignerId = $editingCheck?->first_reading_completed_by_user_id)
+                                        @php($phaseReopenedAt = $editingCheck?->first_reading_reopened_at)
+                                    @else
+                                        @php($phaseSignerId = $editingCheck?->second_reading_completed_by_user_id)
+                                        @php($phaseReopenedAt = $editingCheck?->second_reading_reopened_at)
+                                    @endif
+                                    @php($productionPhaseLocked = filled($phaseSignerId) && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id()))
+
+                                    <div class="table-scroll @if ($productionPhaseLocked) production-phase-locked @endif">
                                     <table>
                                         <thead>
-                                        @if ($sectionSampleKind === 'air_passive')
+                                            @if ($productionPhase === 'sampling' && $sectionSampleKind === 'air_passive')
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Locale / macchina</th>
@@ -1581,35 +1509,25 @@
                                                 <th>Grado</th>
                                                 <th>Ora apertura</th>
                                                 <th>Ora chiusura</th>
-                                                <th>UFC 1a lettura</th>
-                                                <th>UFC 2a lettura</th>
                                             </tr>
-                                        @elseif (in_array($sectionSampleKind, ['air_active', 'surface_contact'], true))
+                                        @elseif ($productionPhase === 'sampling')
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Locale / macchina</th>
                                                 <th>Reparto</th>
                                                 <th>Grado</th>
                                                 <th>Ora campionamento</th>
-                                                <th>UFC 1a lettura</th>
-                                                <th>UFC 2a lettura</th>
                                             </tr>
+                                        @elseif ($sectionSampleKind === 'surface_swab')
+                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>{{ $productionPhase === 'first_reading' ? '1a lettura' : '2a lettura' }}</th></tr>
                                         @else
-                                            <tr>
-                                                <th>ID legacy</th>
-                                                <th>Locale / macchina</th>
-                                                <th>Reparto</th>
-                                                <th>Grado</th>
-                                                <th>Ora campionamento</th>
-                                                <th>1a lettura</th>
-                                                <th>2a lettura</th>
-                                            </tr>
+                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>UFC {{ $productionPhase === 'first_reading' ? '1a' : '2a' }} lettura</th></tr>
                                         @endif
                                         </thead>
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
                                             <tr class="group-row">
-                                                <td colspan="8">Reparto: {{ $departmentName }}</td>
+                                                <td colspan="{{ $productionPhase === 'sampling' && $sectionSampleKind === 'air_passive' ? 6 : 5 }}">Reparto: {{ $departmentName }}</td>
                                             </tr>
 
                                             @foreach ($points as $point)
@@ -1621,40 +1539,30 @@
                                                     </td>
                                                     <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
                                                     <td>{{ $point->area_label ?: '-' }}</td>
-                                                    <td>
-                                                        <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')) }}">
-                                                    </td>
-                                                    @if ($sectionSampleKind === 'air_passive')
+                                                    @if ($productionPhase === 'sampling')
                                                         <td>
-                                                            <input type="time" name="points[{{ $point->id }}][exposure_ended_at]" value="{{ old("points.{$point->id}.exposure_ended_at", data_get($editingPointResults->get($point->id), 'exposure_ended_at')) }}">
+                                                            <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ substr((string) old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')), 0, 5) }}">
                                                         </td>
+                                                    @endif
+                                                    @if ($productionPhase === 'sampling' && $sectionSampleKind === 'air_passive')
+                                                        <td>
+                                                            <input type="time" name="points[{{ $point->id }}][exposure_ended_at]" value="{{ substr((string) old("points.{$point->id}.exposure_ended_at", data_get($editingPointResults->get($point->id), 'exposure_ended_at')), 0, 5) }}">
+                                                        </td>
+                                                    @elseif ($productionPhase === 'first_reading' && $sectionSampleKind === 'surface_swab')
+                                                        <td>
+                                                            <select name="points[{{ $point->id }}][first_growth_result]"><option value="">-</option><option value="growth" @selected(old("points.{$point->id}.first_growth_result", data_get($editingPointResults->get($point->id), 'first_growth_result')) === 'growth')>Crescita</option><option value="no_growth" @selected(old("points.{$point->id}.first_growth_result", data_get($editingPointResults->get($point->id), 'first_growth_result')) === 'no_growth')>Non crescita</option></select>
+                                                        </td>
+                                                    @elseif ($productionPhase === 'second_reading' && $sectionSampleKind === 'surface_swab')
+                                                        <td>
+                                                            <select name="points[{{ $point->id }}][second_growth_result]"><option value="">-</option><option value="growth" @selected(old("points.{$point->id}.second_growth_result", data_get($editingPointResults->get($point->id), 'second_growth_result')) === 'growth')>Crescita</option><option value="no_growth" @selected(old("points.{$point->id}.second_growth_result", data_get($editingPointResults->get($point->id), 'second_growth_result')) === 'no_growth')>Non crescita</option></select>
+                                                        </td>
+                                                    @elseif ($productionPhase === 'first_reading')
                                                         <td>
                                                             <input type="number" min="0" name="points[{{ $point->id }}][first_cfu_count]" value="{{ old("points.{$point->id}.first_cfu_count", data_get($editingPointResults->get($point->id), 'first_cfu_count')) }}">
                                                         </td>
+                                                    @elseif ($productionPhase === 'second_reading')
                                                         <td>
                                                             <input type="number" min="0" name="points[{{ $point->id }}][second_cfu_count]" value="{{ old("points.{$point->id}.second_cfu_count", data_get($editingPointResults->get($point->id), 'second_cfu_count')) }}">
-                                                        </td>
-                                                    @elseif (in_array($sectionSampleKind, ['air_active', 'surface_contact'], true))
-                                                        <td>
-                                                            <input type="number" min="0" name="points[{{ $point->id }}][first_cfu_count]" value="{{ old("points.{$point->id}.first_cfu_count", data_get($editingPointResults->get($point->id), 'first_cfu_count')) }}">
-                                                        </td>
-                                                        <td>
-                                                            <input type="number" min="0" name="points[{{ $point->id }}][second_cfu_count]" value="{{ old("points.{$point->id}.second_cfu_count", data_get($editingPointResults->get($point->id), 'second_cfu_count')) }}">
-                                                        </td>
-                                                    @else
-                                                        <td>
-                                                            <select name="points[{{ $point->id }}][first_growth_result]">
-                                                                <option value="">-</option>
-                                                                <option value="growth" @selected(old("points.{$point->id}.first_growth_result", data_get($editingPointResults->get($point->id), 'first_growth_result')) === 'growth')>Crescita</option>
-                                                                <option value="no_growth" @selected(old("points.{$point->id}.first_growth_result", data_get($editingPointResults->get($point->id), 'first_growth_result')) === 'no_growth')>Non crescita</option>
-                                                            </select>
-                                                        </td>
-                                                        <td>
-                                                            <select name="points[{{ $point->id }}][second_growth_result]">
-                                                                <option value="">-</option>
-                                                                <option value="growth" @selected(old("points.{$point->id}.second_growth_result", data_get($editingPointResults->get($point->id), 'second_growth_result')) === 'growth')>Crescita</option>
-                                                                <option value="no_growth" @selected(old("points.{$point->id}.second_growth_result", data_get($editingPointResults->get($point->id), 'second_growth_result')) === 'no_growth')>Non crescita</option>
-                                                            </select>
                                                         </td>
                                                     @endif
                                                 </tr>
@@ -1664,15 +1572,40 @@
                                     </table>
                                 </div>
 
-                                <div class="field" style="margin-top: 12px;">
+                                @if ($productionPhase === 'sampling')
+                                    @php($phaseSigned = filled($editingCheck?->sampling_completed_by_user_id))
+                                @elseif ($productionPhase === 'first_reading')
+                                    @php($phaseSigned = filled($editingCheck?->first_reading_completed_by_user_id))
+                                @else
+                                    @php($phaseSigned = filled($editingCheck?->second_reading_completed_by_user_id))
+                                @endif
+
+                                <div class="field @if ($productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;">
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
                                 </div>
 
-                                <div class="actions">
-                                    <p class="hint">Form Clean room guidato dai punti e dal tipo di campionamento della sezione.</p>
-                                    <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
-                                </div>
+                                @if ($productionPhaseLocked)
+                                    <div class="actions">
+                                        @if ((int) $phaseSignerId === (int) auth()->id() && ! filled($phaseReopenedAt))
+                                            <div class="field" style="min-width: min(100%, 360px);">
+                                                <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
+                                                <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000">{{ old('reopening_reason') }}</textarea>
+                                            </div>
+                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $productionPhases[$productionPhase] }}</button>
+                                        @else
+                                            <p class="hint">Questa fase e firmata e bloccata. Solo l'operatore che l'ha firmata puo riaprirla indicando una motivazione.</p>
+                                        @endif
+                                    </div>
+                                @else
+                                    <div class="actions">
+                                        <p class="hint">Salvataggio puntuale per singola fase Clean room.</p>
+                                        <button type="submit">{{ $isEditingSection ? 'Aggiorna fase' : 'Salva fase' }}</button>
+                                        @if (! $phaseSigned || filled($phaseReopenedAt))
+                                            <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }}</button>
+                                        @endif
+                                    </div>
+                                @endif
                             </form>
                         @elseif (auth()->user()?->isOperatore() && $currentView === 'nuovo')
                             <form action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
