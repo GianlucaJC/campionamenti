@@ -148,6 +148,15 @@
             flex-wrap: wrap;
         }
 
+        .production-phase-switch {
+            margin-bottom: 20px;
+        }
+
+        .production-phase-locked {
+            opacity: 0.62;
+            pointer-events: none;
+        }
+
         .env-link {
             text-decoration: none;
             padding: 7px 11px;
@@ -163,6 +172,12 @@
             border-color: #1f7a75;
             color: #0f5a56;
             background: #eef9f8;
+        }
+
+        .env-link[aria-disabled="true"] {
+            color: #9b8d7f;
+            background: #f5f0e9;
+            cursor: not-allowed;
         }
 
         .status {
@@ -1060,6 +1075,19 @@
                                             </div>
                                         @endif
                                     @endif
+
+                                    @if (auth()->user()?->isAdmin() && $check->phaseLogs->isNotEmpty())
+                                        <details style="margin-top: 10px;">
+                                            <summary class="hint">Tracciamenti fasi ({{ $check->phaseLogs->count() }})</summary>
+                                            <div style="display: grid; gap: 6px; margin-top: 8px;">
+                                                @foreach ($check->phaseLogs as $phaseLog)
+                                                    <span class="hint">
+                                                        {{ $productionPhases[$phaseLog->phase] ?? $phaseLog->phase }}: {{ $phaseLog->action === 'saved_and_signed' ? 'salvata e firmata' : ($phaseLog->action === 'reopened' ? 'riaperta' : 'salvata') }} da {{ $phaseLog->performedBy?->name ?: ('Utente #' . $phaseLog->performed_by_user_id) }} il {{ $phaseLog->logged_at?->format('d-m-Y H:i') ?: '-' }}@if ($phaseLog->action === 'reopened' && $phaseLog->reason) - Motivazione: {{ $phaseLog->reason }}@endif
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        </details>
+                                    @endif
                                 </div>
                             @endforeach
                         </div>
@@ -1653,6 +1681,10 @@
                                     @method('PATCH')
                                 @endif
 
+                                @if ($currentEnvironment === 'produzione')
+                                    <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
+                                @endif
+
                                 @if ($currentEnvironment === 'acque')
                                     @include('monitoraggi.partials.water-sampling-sheet')
                                 @else
@@ -1851,7 +1883,33 @@
                                         @endforeach
                                     </div>
                                 @else
-                                <div class="table-scroll">
+                                @if ($currentEnvironment === 'produzione')
+                                    <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
+                                        @foreach ($productionPhases as $phaseKey => $phaseLabel)
+                                            @if ($phaseKey === 'sampling' || ($phaseKey === 'first_reading' && filled($editingCheck?->sampling_completed_by_user_id)) || ($phaseKey === 'second_reading' && filled($editingCheck?->first_reading_completed_by_user_id)))
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'produzione', 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
+                                            @else
+                                                <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                @if ($currentEnvironment === 'produzione')
+                                    @if ($productionPhase === 'sampling')
+                                        @php($phaseSignerId = $editingCheck?->sampling_completed_by_user_id)
+                                        @php($phaseReopenedAt = $editingCheck?->sampling_reopened_at)
+                                    @elseif ($productionPhase === 'first_reading')
+                                        @php($phaseSignerId = $editingCheck?->first_reading_completed_by_user_id)
+                                        @php($phaseReopenedAt = $editingCheck?->first_reading_reopened_at)
+                                    @else
+                                        @php($phaseSignerId = $editingCheck?->second_reading_completed_by_user_id)
+                                        @php($phaseReopenedAt = $editingCheck?->second_reading_reopened_at)
+                                    @endif
+                                    @php($productionPhaseLocked = filled($phaseSignerId) && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id()))
+                                @endif
+
+                                <div class="table-scroll @if ($currentEnvironment === 'produzione' && $productionPhaseLocked) production-phase-locked @endif">
                                     <table>
                                         <thead>
                                         @if ($currentEnvironment === 'acque')
@@ -1878,6 +1936,22 @@
                                                 <th>UFC confermate</th>
                                                 <th>UFC/100 ml</th>
                                             </tr>
+                                        @elseif ($currentEnvironment === 'produzione')
+                                            <tr>
+                                                <th>ID legacy</th>
+                                                <th>Descrizione punto</th>
+                                                <th>Reparto</th>
+                                                <th>Area dettagliata</th>
+                                                @if ($productionPhase === 'sampling')
+                                                    <th>Ora</th>
+                                                    <th>Operativo</th>
+                                                    <th>Lotto prodotto</th>
+                                                @elseif ($productionPhase === 'first_reading')
+                                                    <th>UFC/m3 (prima lettura)</th>
+                                                @else
+                                                    <th>UFC/m3 (seconda lettura)</th>
+                                                @endif
+                                            </tr>
                                         @else
                                             <tr>
                                                 <th>ID legacy</th>
@@ -1896,7 +1970,7 @@
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
                                             <tr class="group-row">
-                                                <td colspan="{{ $currentEnvironment === 'acque' ? 15 : 10 }}">Reparto: {{ $departmentName }}</td>
+                                                <td colspan="{{ $currentEnvironment === 'acque' ? 15 : ($currentEnvironment === 'produzione' ? ($productionPhase === 'sampling' ? 7 : 5) : 10) }}">Reparto: {{ $departmentName }}</td>
                                             </tr>
 
                                             @foreach ($points as $point)
@@ -1956,6 +2030,45 @@
                                                                 <option value="non_conforme" @selected(old("points.{$point->id}.final_result", data_get($editingPointResults->get($point->id), 'final_result')) === 'non_conforme')>Non conforme</option>
                                                             </select>
                                                         </td>
+                                                    @elseif ($currentEnvironment === 'produzione')
+                                                        <td>{{ $point->legacy_code ?: '-' }}</td>
+                                                        <td>
+                                                            {{ $point->title }}
+                                                            <div class="kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</div>
+                                                        </td>
+                                                        <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
+                                                        <td>{{ $point->area_label ?: '-' }}</td>
+                                                        @if ($productionPhase === 'sampling')
+                                                            <td>
+                                                                <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ substr((string) old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')), 0, 5) }}">
+                                                            </td>
+                                                            <td>
+                                                                @if ($point->requires_operational_status)
+                                                                    <select name="points[{{ $point->id }}][is_operational]" data-production-operational>
+                                                                        <option value="">-</option>
+                                                                        <option value="1" @selected((string) old("points.{$point->id}.is_operational", data_get($editingPointResults->get($point->id), 'is_operational')) === '1')>Si</option>
+                                                                        <option value="0" @selected((string) old("points.{$point->id}.is_operational", data_get($editingPointResults->get($point->id), 'is_operational')) === '0')>No</option>
+                                                                    </select>
+                                                                @else
+                                                                    -
+                                                                @endif
+                                                            </td>
+                                                            <td data-production-product-lot hidden>
+                                                                @if ($point->requires_product_lot && $point->requires_operational_status)
+                                                                    <input type="text" name="points[{{ $point->id }}][product_lot]" value="{{ old("points.{$point->id}.product_lot", data_get($editingPointResults->get($point->id), 'product_lot')) }}" maxlength="120" disabled>
+                                                                @else
+                                                                    -
+                                                                @endif
+                                                            </td>
+                                                        @elseif ($productionPhase === 'first_reading')
+                                                            <td>
+                                                                <input type="number" min="0" name="points[{{ $point->id }}][first_cfu_count]" value="{{ old("points.{$point->id}.first_cfu_count", data_get($editingPointResults->get($point->id), 'first_cfu_count')) }}">
+                                                            </td>
+                                                        @else
+                                                            <td>
+                                                                <input type="number" min="0" name="points[{{ $point->id }}][second_cfu_count]" value="{{ old("points.{$point->id}.second_cfu_count", data_get($editingPointResults->get($point->id), 'second_cfu_count')) }}">
+                                                            </td>
+                                                        @endif
                                                     @else
                                                         <td>{{ $point->legacy_code ?: '-' }}</td>
                                                         <td>
@@ -2001,15 +2114,42 @@
                                 </div>
                                 @endif
 
-                                <div class="field" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
+                                @if ($currentEnvironment === 'produzione')
+                                    @if ($productionPhase === 'sampling')
+                                        @php($phaseSigned = filled($editingCheck?->sampling_completed_by_user_id))
+                                    @elseif ($productionPhase === 'first_reading')
+                                        @php($phaseSigned = filled($editingCheck?->first_reading_completed_by_user_id))
+                                    @else
+                                        @php($phaseSigned = filled($editingCheck?->second_reading_completed_by_user_id))
+                                    @endif
+                                @endif
+
+                                <div class="field @if ($currentEnvironment === 'produzione' && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
                                 </div>
 
-                                <div class="actions" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
-                                    <p class="hint">Salvataggio puntuale per singola sezione.</p>
-                                    <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
-                                </div>
+                                @if ($currentEnvironment === 'produzione' && $productionPhaseLocked)
+                                    <div class="actions">
+                                        @if ((int) $phaseSignerId === (int) auth()->id() && ! filled($phaseReopenedAt))
+                                            <div class="field" style="min-width: min(100%, 360px);">
+                                                <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
+                                                <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000" required>{{ old('reopening_reason') }}</textarea>
+                                            </div>
+                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $productionPhases[$productionPhase] }}</button>
+                                        @else
+                                            <p class="hint">Questa fase e firmata e bloccata. Solo l'operatore che l'ha firmata puo riaprirla indicando una motivazione.</p>
+                                        @endif
+                                    </div>
+                                @else
+                                    <div class="actions" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
+                                        <p class="hint">Salvataggio puntuale per singola sezione.</p>
+                                        <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
+                                        @if ($currentEnvironment === 'produzione' && (! $phaseSigned || filled($phaseReopenedAt)))
+                                            <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }}</button>
+                                        @endif
+                                    </div>
+                                @endif
                             </form>
                         @elseif ($currentView === 'nuovo')
                             <div class="actions" style="margin-top:12px;">
@@ -2064,6 +2204,33 @@
 
             departmentSelect.addEventListener('change', syncAnchorOptions);
             syncAnchorOptions();
+        });
+
+        document.querySelectorAll('[data-production-operational]').forEach(function (operationalSelect) {
+            var row = operationalSelect.closest('tr');
+            var productLotCell = row ? row.querySelector('[data-production-product-lot]') : null;
+
+            if (!productLotCell) {
+                return;
+            }
+
+            var productLotInput = productLotCell.querySelector('input');
+            var syncProductLot = function () {
+                var isOperational = operationalSelect.value === '1';
+
+                productLotCell.hidden = !isOperational;
+
+                if (productLotInput) {
+                    productLotInput.disabled = !isOperational;
+
+                    if (!isOperational) {
+                        productLotInput.value = '';
+                    }
+                }
+            };
+
+            operationalSelect.addEventListener('change', syncProductLot);
+            syncProductLot();
         });
 
         document.querySelectorAll('[data-water-wizard]').forEach(function (wizard) {

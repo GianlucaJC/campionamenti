@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MicrobiologicalCheck;
 use App\Models\MicrobiologicalCheckPoint;
+use App\Models\MicrobiologicalCheckPhaseLog;
 use App\Models\MonitoringDepartment;
 use App\Models\MonitoringSection;
 use App\Models\SamplingPoint;
@@ -12,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class MonitoringController extends Controller
@@ -94,6 +96,16 @@ class MonitoringController extends Controller
 
         $availableSubEnvironments = collect($subEnvironmentLabels[$currentEnvironment] ?? []);
         $currentSubEnvironment = null;
+        $productionPhases = [
+            'sampling' => 'Fase campionamento',
+            'first_reading' => 'Prima lettura UFC/m3',
+            'second_reading' => 'Seconda lettura UFC/m3',
+        ];
+        $productionPhase = (string) $request->query('phase', 'sampling');
+
+        if (! array_key_exists($productionPhase, $productionPhases)) {
+            $productionPhase = 'sampling';
+        }
 
         if ($availableSubEnvironments->isNotEmpty()) {
             $currentSubEnvironment = (string) $request->query('sub', (string) $availableSubEnvironments->keys()->first());
@@ -152,6 +164,10 @@ class MonitoringController extends Controller
                 })
                 ->orderByDesc('sampled_on')
                 ->orderByDesc('id');
+
+            if ($request->user()?->isAdmin()) {
+                $archiveQuery->with(['phaseLogs.performedBy:id,name']);
+            }
 
             if ($currentEnvironment === 'acque') {
                 $archiveQuery->with(['pointResults.point']);
@@ -233,6 +249,8 @@ class MonitoringController extends Controller
             'currentEnvironment' => $currentEnvironment,
             'availableSubEnvironments' => $availableSubEnvironments,
             'currentSubEnvironment' => $currentSubEnvironment,
+            'productionPhases' => $productionPhases,
+            'productionPhase' => $productionPhase,
             'sampleKindLabels' => $sampleKindLabels,
             'sections' => $sections,
             'filteredSections' => $filteredSections,
@@ -260,24 +278,33 @@ class MonitoringController extends Controller
             ->orderBy('sort_order')
             ->get();
 
+        $this->normalizeTimeInputs($request, $pointCollection);
         $data = $request->validate($this->buildCheckRules($pointCollection));
+        $this->ensureProductionPhaseCanBeAccessed($data);
+        $userId = (int) Auth::id();
+        $this->addProductionPhaseSigner($data, $userId);
 
-        DB::transaction(function () use ($data, $pointCollection, $section): void {
+        $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId): int {
             $check = MicrobiologicalCheck::query()->create([
                 'monitoring_section_id' => $section->id,
                 'sampled_on' => $data['sampled_on'],
-                'created_by_user_id' => Auth::id(),
+                'created_by_user_id' => $userId,
             ]);
 
             $this->persistCheck($check, $data, $pointCollection);
+            $this->recordProductionPhaseLog($check, $data, $userId);
+
+            return $check->id;
         });
 
         return redirect()
-            ->route('monitoraggi.index', [
+            ->route('monitoraggi.index', array_filter([
                 'view' => 'nuovo',
                 'env' => $section->environment ?: 'produzione',
                 'sub' => $section->sub_environment ?: null,
-            ])
+                'phase' => $data['entry_phase'] ?? null,
+                'edit_check' => $checkId,
+            ]))
             ->with('status', "Sezione '{$section->name}' salvata con successo.");
     }
 
@@ -302,19 +329,44 @@ class MonitoringController extends Controller
             ->orderBy('sort_order')
             ->get();
 
+        $this->normalizeTimeInputs($request, $pointCollection);
         $data = $request->validate($this->buildCheckRules($pointCollection));
+        $this->ensureProductionPhaseCanBeAccessed($data, $check);
+        $userId = (int) Auth::id();
+        $isReopening = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
 
-        DB::transaction(function () use ($check, $data, $pointCollection): void {
+        if ($isReopening) {
+            DB::transaction(function () use ($check, $data, $userId): void {
+                $this->reopenProductionPhase($check, $data, $userId);
+                $this->recordProductionPhaseLog($check, $data, $userId, 'reopened');
+            });
+
+            return redirect()
+                ->route('monitoraggi.index', array_filter([
+                    'view' => 'nuovo',
+                    'env' => $section->environment ?: 'produzione',
+                    'sub' => $section->sub_environment ?: null,
+                    'edit_check' => $check->id,
+                    'phase' => $data['entry_phase'] ?? null,
+                ]))
+                ->with('status', "Fase della sezione '{$section->name}' riaperta in scrittura.");
+        }
+
+        $this->addProductionPhaseSigner($data, $userId);
+
+        DB::transaction(function () use ($check, $data, $pointCollection, $userId): void {
             $this->persistCheck($check, $data, $pointCollection);
+            $this->recordProductionPhaseLog($check, $data, $userId);
         });
 
         return redirect()
-            ->route('monitoraggi.index', [
+            ->route('monitoraggi.index', array_filter([
                 'view' => 'nuovo',
                 'env' => $section->environment ?: 'produzione',
                 'sub' => $section->sub_environment ?: null,
                 'edit_check' => $check->id,
-            ])
+                'phase' => $data['entry_phase'] ?? null,
+            ]))
             ->with('status', "Sezione '{$section->name}' aggiornata con successo.");
     }
 
@@ -324,6 +376,10 @@ class MonitoringController extends Controller
     private function buildCheckRules($pointCollection): array
     {
         $rules = [
+            'entry_phase' => ['nullable', 'in:sampling,first_reading,second_reading'],
+            'sign_phase' => ['nullable', 'boolean'],
+            'reopen_phase' => ['nullable', 'boolean'],
+            'reopening_reason' => ['nullable', 'string', 'max:1000'],
             'facility_name' => ['nullable', 'string', 'max:120'],
             'sampled_on' => ['required', 'date'],
             'sampled_time' => ['nullable', 'date_format:H:i'],
@@ -367,6 +423,8 @@ class MonitoringController extends Controller
             $prefix = "points.{$point->id}";
             $rules["{$prefix}.sampled_at"] = ['nullable', 'date_format:H:i'];
             $rules["{$prefix}.cfu_count"] = ['nullable', 'integer', 'min:0'];
+            $rules["{$prefix}.first_cfu_count"] = ['nullable', 'integer', 'min:0'];
+            $rules["{$prefix}.second_cfu_count"] = ['nullable', 'integer', 'min:0'];
             $rules["{$prefix}.notes"] = ['nullable', 'string', 'max:500'];
 
             if ($point->sample_kind === 'air_passive') {
@@ -415,11 +473,175 @@ class MonitoringController extends Controller
     }
 
     /**
+     * HTML time controls submit hours and minutes while existing MySQL TIME values include seconds.
+     */
+    private function normalizeTimeInputs(Request $request, $pointCollection): void
+    {
+        $points = $request->input('points', []);
+
+        foreach ($pointCollection as $point) {
+            $pointInput = $points[$point->id] ?? null;
+
+            if (! is_array($pointInput)) {
+                continue;
+            }
+
+            foreach (['sampled_at', 'exposure_ended_at'] as $field) {
+                if (isset($pointInput[$field]) && is_string($pointInput[$field])) {
+                    $points[$point->id][$field] = substr($pointInput[$field], 0, 5);
+                }
+            }
+        }
+
+        $sampledTime = $request->input('sampled_time');
+
+        $request->merge([
+            'sampled_time' => is_string($sampledTime) ? substr($sampledTime, 0, 5) : $sampledTime,
+            'points' => $points,
+        ]);
+    }
+
+    /**
+     * Prevent access to production reading phases before their preceding phase is signed.
+     */
+    private function ensureProductionPhaseCanBeAccessed(array $data, ?MicrobiologicalCheck $check = null): void
+    {
+        $phase = $data['entry_phase'] ?? null;
+
+        if (! $phase) {
+            return;
+        }
+
+        if ($phase === 'first_reading' && ! filled($check?->sampling_completed_by_user_id)) {
+            throw ValidationException::withMessages([
+                'entry_phase' => 'Completa e firma prima la fase di campionamento.',
+            ]);
+        }
+
+        if ($phase === 'second_reading' && ! filled($check?->first_reading_completed_by_user_id)) {
+            throw ValidationException::withMessages([
+                'entry_phase' => 'Completa e firma prima la prima lettura.',
+            ]);
+        }
+    }
+
+    /**
+     * Record the authenticated operator only when the dedicated phase-signing action is used.
+     */
+    private function addProductionPhaseSigner(array &$data, int $userId): void
+    {
+        if (empty($data['sign_phase']) || empty($data['entry_phase'])) {
+            return;
+        }
+
+        $signerFields = [
+            'sampling' => 'sampling_completed_by_user_id',
+            'first_reading' => 'first_reading_completed_by_user_id',
+            'second_reading' => 'second_reading_completed_by_user_id',
+        ];
+
+        $data[$signerFields[$data['entry_phase']]] = $userId;
+    }
+
+    /**
+     * Enforce that signed phases remain read-only until their signer reopens them with a reason.
+     */
+    private function ensureProductionPhaseCanBeWritten(array $data, MicrobiologicalCheck $check, int $userId): bool
+    {
+        $phase = $data['entry_phase'] ?? null;
+
+        if (! $phase) {
+            return false;
+        }
+
+        $signerFields = [
+            'sampling' => 'sampling_completed_by_user_id',
+            'first_reading' => 'first_reading_completed_by_user_id',
+            'second_reading' => 'second_reading_completed_by_user_id',
+        ];
+        $reopenedAtFields = [
+            'sampling' => 'sampling_reopened_at',
+            'first_reading' => 'first_reading_reopened_at',
+            'second_reading' => 'second_reading_reopened_at',
+        ];
+        $signerId = $check->{$signerFields[$phase]};
+
+        if (! $signerId) {
+            return false;
+        }
+
+        if ((int) $signerId !== $userId) {
+            throw ValidationException::withMessages([
+                'entry_phase' => 'Solo l\'operatore che ha firmato questa fase puo modificarla o riaprirla.',
+            ]);
+        }
+
+        if (filled($check->{$reopenedAtFields[$phase]})) {
+            return false;
+        }
+
+        if (empty($data['reopen_phase'])) {
+            throw ValidationException::withMessages([
+                'entry_phase' => 'La fase e firmata e bloccata. Riaprila indicando una motivazione per poterla modificare.',
+            ]);
+        }
+
+        if (blank($data['reopening_reason'] ?? null)) {
+            throw ValidationException::withMessages([
+                'reopening_reason' => 'Indica la motivazione della riapertura.',
+            ]);
+        }
+
+        return true;
+    }
+
+    /**
+     * Mark a signed phase writable again while preserving the signing operator and audit reason.
+     */
+    private function reopenProductionPhase(MicrobiologicalCheck $check, array $data, int $userId): void
+    {
+        $phase = $data['entry_phase'];
+        $reopenFields = [
+            'sampling' => ['by' => 'sampling_reopened_by_user_id', 'at' => 'sampling_reopened_at', 'reason' => 'sampling_reopening_reason'],
+            'first_reading' => ['by' => 'first_reading_reopened_by_user_id', 'at' => 'first_reading_reopened_at', 'reason' => 'first_reading_reopening_reason'],
+            'second_reading' => ['by' => 'second_reading_reopened_by_user_id', 'at' => 'second_reading_reopened_at', 'reason' => 'second_reading_reopening_reason'],
+        ];
+        $fields = $reopenFields[$phase];
+
+        $check->update([
+            $fields['by'] => $userId,
+            $fields['at'] => now(),
+            $fields['reason'] => $data['reopening_reason'],
+        ]);
+    }
+
+    /**
+     * Keep an immutable audit row for every production-phase submission.
+     */
+    private function recordProductionPhaseLog(MicrobiologicalCheck $check, array $data, int $userId, ?string $action = null): void
+    {
+        $phase = $data['entry_phase'] ?? null;
+
+        if (! $phase) {
+            return;
+        }
+
+        MicrobiologicalCheckPhaseLog::query()->create([
+            'microbiological_check_id' => $check->id,
+            'phase' => $phase,
+            'action' => $action ?? (empty($data['sign_phase']) ? 'saved' : 'saved_and_signed'),
+            'reason' => $action === 'reopened' ? $data['reopening_reason'] : null,
+            'performed_by_user_id' => $userId,
+            'logged_at' => now(),
+        ]);
+    }
+
+    /**
      * Persist header and point-level data for a check.
      */
     private function persistCheck(MicrobiologicalCheck $check, array $data, $pointCollection): void
     {
-        $check->update([
+        $checkPayload = [
             'facility_name' => $data['facility_name'] ?? null,
             'sampled_on' => $data['sampled_on'],
             'sampled_time' => $data['sampled_time'] ?? null,
@@ -427,6 +649,18 @@ class MonitoringController extends Controller
             'first_reading_on' => $data['first_reading_on'] ?? null,
             'second_reading_on' => $data['second_reading_on'] ?? null,
             'operator_name' => $data['operator_name'] ?? null,
+            'sampling_completed_by_user_id' => $data['sampling_completed_by_user_id'] ?? null,
+            'first_reading_completed_by_user_id' => $data['first_reading_completed_by_user_id'] ?? null,
+            'second_reading_completed_by_user_id' => $data['second_reading_completed_by_user_id'] ?? null,
+            'sampling_reopened_by_user_id' => $data['sampling_reopened_by_user_id'] ?? null,
+            'sampling_reopened_at' => $data['sampling_reopened_at'] ?? null,
+            'sampling_reopening_reason' => $data['sampling_reopening_reason'] ?? null,
+            'first_reading_reopened_by_user_id' => $data['first_reading_reopened_by_user_id'] ?? null,
+            'first_reading_reopened_at' => $data['first_reading_reopened_at'] ?? null,
+            'first_reading_reopening_reason' => $data['first_reading_reopening_reason'] ?? null,
+            'second_reading_reopened_by_user_id' => $data['second_reading_reopened_by_user_id'] ?? null,
+            'second_reading_reopened_at' => $data['second_reading_reopened_at'] ?? null,
+            'second_reading_reopening_reason' => $data['second_reading_reopening_reason'] ?? null,
             'incubation_started_signature' => $data['incubation_started_signature'] ?? null,
             'incubation_finished_signature' => $data['incubation_finished_signature'] ?? null,
             'cq_operator_name' => $data['cq_operator_name'] ?? null,
@@ -456,7 +690,35 @@ class MonitoringController extends Controller
             'enterococci_incubation_started_on' => $data['enterococci_incubation_started_on'] ?? null,
             'enterococci_incubation_finished_on' => $data['enterococci_incubation_finished_on'] ?? null,
             'notes' => $data['notes'] ?? null,
-        ]);
+        ];
+
+        $phase = $data['entry_phase'] ?? null;
+        if ($phase) {
+            $signerFields = [
+                'sampling' => 'sampling_completed_by_user_id',
+                'first_reading' => 'first_reading_completed_by_user_id',
+                'second_reading' => 'second_reading_completed_by_user_id',
+            ];
+            $phasePayloadFields = ['sampled_on'];
+
+            if (! empty($data['sign_phase'])) {
+                $phasePayloadFields[] = $signerFields[$phase];
+                $reopenFields = [
+                    'sampling' => ['sampling_reopened_by_user_id', 'sampling_reopened_at', 'sampling_reopening_reason'],
+                    'first_reading' => ['first_reading_reopened_by_user_id', 'first_reading_reopened_at', 'first_reading_reopening_reason'],
+                    'second_reading' => ['second_reading_reopened_by_user_id', 'second_reading_reopened_at', 'second_reading_reopening_reason'],
+                ];
+
+                foreach ($reopenFields[$phase] as $field) {
+                    $data[$field] = null;
+                    $phasePayloadFields[] = $field;
+                }
+            }
+
+            $checkPayload = array_intersect_key($checkPayload, array_flip($phasePayloadFields));
+        }
+
+        $check->update($checkPayload);
 
         $existingResults = $check->pointResults()->get()->keyBy('sampling_point_id');
         $touchedPointIds = [];
@@ -472,7 +734,7 @@ class MonitoringController extends Controller
             $existingResult = $existingResults->get($point->id);
 
             if (! $hasValue) {
-                if ($existingResult) {
+                if ($existingResult && empty($data['entry_phase'])) {
                     $existingResult->delete();
                 }
 
@@ -512,6 +774,34 @@ class MonitoringController extends Controller
                 'final_result' => $pointInput['final_result'] ?? null,
                 'notes' => $pointInput['notes'] ?? null,
             ];
+
+            if (($data['entry_phase'] ?? null) === 'sampling') {
+                $payload = array_intersect_key($payload, array_flip([
+                    'sampled_at',
+                    'is_operational',
+                    'product_lot',
+                ]));
+
+                if (($pointInput['is_operational'] ?? null) !== '1' && ($pointInput['is_operational'] ?? null) !== 1) {
+                    $payload['product_lot'] = null;
+                }
+            }
+
+            if (($data['entry_phase'] ?? null) === 'first_reading') {
+                $payload = array_intersect_key($payload, array_flip(['first_cfu_count']));
+            }
+
+            if (($data['entry_phase'] ?? null) === 'second_reading') {
+                $payload = array_intersect_key($payload, array_flip(['second_cfu_count', 'cfu_count']));
+                $payload['cfu_count'] = $pointInput['second_cfu_count'] ?? null;
+            }
+
+            if ($existingResult) {
+                $payload = array_merge(
+                    array_intersect_key($existingResult->getAttributes(), array_flip(array_keys($payload))),
+                    $payload
+                );
+            }
 
             if ($existingResult) {
                 $existingResult->update($payload);

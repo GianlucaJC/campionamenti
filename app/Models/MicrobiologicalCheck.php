@@ -25,6 +25,21 @@ class MicrobiologicalCheck extends Model
         'first_reading_on',
         'second_reading_on',
         'operator_name',
+        'sampling_completed_signature',
+        'first_reading_completed_signature',
+        'second_reading_completed_signature',
+        'sampling_completed_by_user_id',
+        'first_reading_completed_by_user_id',
+        'second_reading_completed_by_user_id',
+        'sampling_reopened_by_user_id',
+        'sampling_reopened_at',
+        'sampling_reopening_reason',
+        'first_reading_reopened_by_user_id',
+        'first_reading_reopened_at',
+        'first_reading_reopening_reason',
+        'second_reading_reopened_by_user_id',
+        'second_reading_reopened_at',
+        'second_reading_reopening_reason',
         'incubation_started_signature',
         'incubation_finished_signature',
         'cq_operator_name',
@@ -79,5 +94,14 @@ class MicrobiologicalCheck extends Model
     public function pointResults(): HasMany
     {
         return $this->hasMany(MicrobiologicalCheckPoint::class);
+    }
+
+    /**
+     * @return HasMany<MicrobiologicalCheckPhaseLog>
+     */
+    public function phaseLogs(): HasMany
+    {
+        return $this->hasMany(MicrobiologicalCheckPhaseLog::class)
+            ->orderByDesc('logged_at');
     }
 }
