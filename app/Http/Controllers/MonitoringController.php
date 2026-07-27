@@ -331,6 +331,21 @@ class MonitoringController extends Controller
 
         $this->normalizeTimeInputs($request, $pointCollection);
         $data = $request->validate($this->buildCheckRules($pointCollection));
+
+        if (! empty($data['save_header']) && ! empty($data['entry_phase'])) {
+            $this->persistCheckHeader($check, $data);
+
+            return redirect()
+                ->route('monitoraggi.index', array_filter([
+                    'view' => 'nuovo',
+                    'env' => $section->environment ?: 'produzione',
+                    'sub' => $section->sub_environment ?: null,
+                    'edit_check' => $check->id,
+                    'phase' => $data['entry_phase'],
+                ]))
+                ->with('status', "Intestazione della sezione '{$section->name}' aggiornata con successo.");
+        }
+
         $this->ensureProductionPhaseCanBeAccessed($data, $check);
         $userId = (int) Auth::id();
         $isReopening = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
@@ -378,6 +393,7 @@ class MonitoringController extends Controller
         $rules = [
             'entry_phase' => ['nullable', 'in:sampling,first_reading,second_reading'],
             'sign_phase' => ['nullable', 'boolean'],
+            'save_header' => ['nullable', 'boolean'],
             'reopen_phase' => ['nullable', 'boolean'],
             'reopening_reason' => ['nullable', 'string', 'max:1000'],
             'facility_name' => ['nullable', 'string', 'max:120'],
@@ -637,30 +653,24 @@ class MonitoringController extends Controller
     }
 
     /**
-     * Persist header and point-level data for a check.
+     * Persist only section-header fields, independently from production-phase locks.
      */
-    private function persistCheck(MicrobiologicalCheck $check, array $data, $pointCollection): void
+    private function persistCheckHeader(MicrobiologicalCheck $check, array $data): void
     {
-        $checkPayload = [
+        $check->update($this->checkHeaderPayload($data));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function checkHeaderPayload(array $data): array
+    {
+        $payload = [
             'facility_name' => $data['facility_name'] ?? null,
             'sampled_on' => $data['sampled_on'],
             'sampled_time' => $data['sampled_time'] ?? null,
             'incubation_started_on' => $data['incubation_started_on'] ?? null,
-            'first_reading_on' => $data['first_reading_on'] ?? null,
-            'second_reading_on' => $data['second_reading_on'] ?? null,
             'operator_name' => $data['operator_name'] ?? null,
-            'sampling_completed_by_user_id' => $data['sampling_completed_by_user_id'] ?? null,
-            'first_reading_completed_by_user_id' => $data['first_reading_completed_by_user_id'] ?? null,
-            'second_reading_completed_by_user_id' => $data['second_reading_completed_by_user_id'] ?? null,
-            'sampling_reopened_by_user_id' => $data['sampling_reopened_by_user_id'] ?? null,
-            'sampling_reopened_at' => $data['sampling_reopened_at'] ?? null,
-            'sampling_reopening_reason' => $data['sampling_reopening_reason'] ?? null,
-            'first_reading_reopened_by_user_id' => $data['first_reading_reopened_by_user_id'] ?? null,
-            'first_reading_reopened_at' => $data['first_reading_reopened_at'] ?? null,
-            'first_reading_reopening_reason' => $data['first_reading_reopening_reason'] ?? null,
-            'second_reading_reopened_by_user_id' => $data['second_reading_reopened_by_user_id'] ?? null,
-            'second_reading_reopened_at' => $data['second_reading_reopened_at'] ?? null,
-            'second_reading_reopening_reason' => $data['second_reading_reopening_reason'] ?? null,
             'incubation_started_signature' => $data['incubation_started_signature'] ?? null,
             'incubation_finished_signature' => $data['incubation_finished_signature'] ?? null,
             'cq_operator_name' => $data['cq_operator_name'] ?? null,
@@ -689,8 +699,25 @@ class MonitoringController extends Controller
             'enterococci_incubator_code' => $data['enterococci_incubator_code'] ?? null,
             'enterococci_incubation_started_on' => $data['enterococci_incubation_started_on'] ?? null,
             'enterococci_incubation_finished_on' => $data['enterococci_incubation_finished_on'] ?? null,
-            'notes' => $data['notes'] ?? null,
         ];
+
+        foreach (['first_reading_on', 'second_reading_on'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $payload[$field] = $data[$field];
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Persist header and point-level data for a check.
+     */
+    private function persistCheck(MicrobiologicalCheck $check, array $data, $pointCollection): void
+    {
+        $checkPayload = array_merge($this->checkHeaderPayload($data), [
+            'notes' => $data['notes'] ?? null,
+        ]);
 
         $phase = $data['entry_phase'] ?? null;
         if ($phase) {
@@ -702,6 +729,7 @@ class MonitoringController extends Controller
             $phasePayloadFields = ['sampled_on'];
 
             if (! empty($data['sign_phase'])) {
+                $checkPayload[$signerFields[$phase]] = $data[$signerFields[$phase]] ?? null;
                 $phasePayloadFields[] = $signerFields[$phase];
                 $reopenFields = [
                     'sampling' => ['sampling_reopened_by_user_id', 'sampling_reopened_at', 'sampling_reopening_reason'],
@@ -711,6 +739,7 @@ class MonitoringController extends Controller
 
                 foreach ($reopenFields[$phase] as $field) {
                     $data[$field] = null;
+                    $checkPayload[$field] = null;
                     $phasePayloadFields[] = $field;
                 }
             }

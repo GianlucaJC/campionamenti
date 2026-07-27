@@ -1703,14 +1703,16 @@
                                         <label for="incubation_started_on_{{ $section->id }}">Inizio incubazione</label>
                                         <input id="incubation_started_on_{{ $section->id }}" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', $isEditingSection ? $editingCheck->incubation_started_on : null) }}">
                                     </div>
-                                    <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
-                                        <label for="first_reading_on_{{ $section->id }}">1a lettura</label>
-                                        <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $isEditingSection ? $editingCheck->first_reading_on : null) }}">
-                                    </div>
-                                    <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
-                                        <label for="second_reading_on_{{ $section->id }}">2a lettura</label>
-                                        <input id="second_reading_on_{{ $section->id }}" type="date" name="second_reading_on" value="{{ old('second_reading_on', $isEditingSection ? $editingCheck->second_reading_on : null) }}">
-                                    </div>
+                                    @if ($currentEnvironment !== 'produzione')
+                                        <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
+                                            <label for="first_reading_on_{{ $section->id }}">1a lettura</label>
+                                            <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $isEditingSection ? $editingCheck->first_reading_on : null) }}">
+                                        </div>
+                                        <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
+                                            <label for="second_reading_on_{{ $section->id }}">2a lettura</label>
+                                            <input id="second_reading_on_{{ $section->id }}" type="date" name="second_reading_on" value="{{ old('second_reading_on', $isEditingSection ? $editingCheck->second_reading_on : null) }}">
+                                        </div>
+                                    @endif
                                     <div class="field">
                                         <label for="operator_name_{{ $section->id }}">Firma campionatore</label>
                                         <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : auth()->user()?->name) }}" maxlength="120">
@@ -1760,6 +1762,11 @@
                                         <div class="field">
                                             <label for="swab_lot_{{ $section->id }}">Lotto provette/swab</label>
                                             <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $isEditingSection ? $editingCheck->swab_lot : null) }}" maxlength="120">
+                                        </div>
+                                    @endif
+                                    @if ($currentEnvironment === 'produzione' && $isEditingSection)
+                                        <div class="field" style="align-self: end;">
+                                            <button type="submit" name="save_header" value="1">Salva intestazione</button>
                                         </div>
                                     @endif
                                 </div>
@@ -2134,7 +2141,7 @@
                                         @if ((int) $phaseSignerId === (int) auth()->id() && ! filled($phaseReopenedAt))
                                             <div class="field" style="min-width: min(100%, 360px);">
                                                 <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
-                                                <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000" required>{{ old('reopening_reason') }}</textarea>
+                                                <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000">{{ old('reopening_reason') }}</textarea>
                                             </div>
                                             <button type="submit" name="reopen_phase" value="1">Riapri {{ $productionPhases[$productionPhase] }}</button>
                                         @else
