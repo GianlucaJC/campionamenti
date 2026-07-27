@@ -31,4 +31,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'liof_login' => [
+        'url' => env('API_LOGIN_URL', 'http://localhost/api_user_liof/api_login.php'),
+        'token' => env('API_LOGIN_SHARED_SECRET'),
+        'verify_ssl' => env('API_LOGIN_VERIFY_SSL', true),
+    ],
+
 ];

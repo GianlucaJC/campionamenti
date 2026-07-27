@@ -63,7 +63,7 @@
             color: var(--muted);
         }
 
-        input[type='email'],
+        input[type='text'],
         input[type='password'] {
             width: 100%;
             border: 1px solid #cdbfae;
@@ -118,8 +118,8 @@
             @csrf
 
             <div class="field">
-                <label for="email">Email</label>
-                <input id="email" name="email" type="email" value="{{ old('email') }}" required autofocus>
+                <label for="username">Utente</label>
+                <input id="username" name="username" type="text" value="{{ old('username') }}" required autofocus autocomplete="username">
             </div>
 
             <div class="field">
