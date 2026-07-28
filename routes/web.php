@@ -39,6 +39,8 @@ Route::middleware(['auth', 'role:operatore'])->group(function () {
 
 // Accessibile solo da admin (gestione struttura)
 Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::patch('/monitoraggi/{section}/visibility', [MonitoringController::class, 'updateSectionVisibility'])
+        ->name('monitoraggi.sections.visibility');
     Route::post('/monitoraggi/{section}/points', [MonitoringController::class, 'storePoint'])
         ->name('monitoraggi.points.store');
     Route::patch('/monitoraggi/{section}/points/{point}', [MonitoringController::class, 'updatePoint'])

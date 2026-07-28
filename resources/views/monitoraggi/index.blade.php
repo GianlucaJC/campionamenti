@@ -1148,11 +1148,28 @@
 
                     <div class="section-body">
                         @foreach ($filteredSections as $section)
-                            <details class="department-manager">
+                            <details class="department-manager" open>
                                 <summary>
-                                    <span class="creator-title">{{ $section->name }}</span>
+                                    <span class="creator-title">
+                                        {{ $section->name }}
+                                        @if (! $section->is_active)
+                                            <span class="badge soft">Oscurato per operatori</span>
+                                        @endif
+                                    </span>
                                 </summary>
                                 <div class="department-body">
+                                    <form action="{{ route('monitoraggi.sections.visibility', $section) }}" method="POST">
+                                        @csrf
+                                        @method('PATCH')
+                                        <div class="actions" style="margin-bottom:10px;">
+                                            <p class="hint">Oscurando la sezione, gli operatori non vedranno {{ $section->name }} ne i relativi reparti e punti.</p>
+                                            @if ($section->is_active)
+                                                <button type="submit" class="btn-small soft-btn" name="visibility_action" value="hide">Oscura sezione</button>
+                                            @else
+                                                <button type="submit" class="btn-small" name="visibility_action" value="show">Riattiva sezione</button>
+                                            @endif
+                                        </div>
+                                    </form>
                                     <form action="{{ route('monitoraggi.departments.store', $section) }}" method="POST">
                                         @csrf
                                         <div class="department-grid">
@@ -1163,6 +1180,10 @@
                                             <div class="field">
                                                 <label for="new_department_code_global_{{ $section->id }}">Codice reparto (opzionale)</label>
                                                 <input id="new_department_code_global_{{ $section->id }}" type="text" name="code" maxlength="50" placeholder="es. laminar">
+                                            </div>
+                                            <div class="field">
+                                                <label for="new_department_readings_global_{{ $section->id }}">Numero letture</label>
+                                                <input id="new_department_readings_global_{{ $section->id }}" type="number" name="readings_count" min="1" max="10" value="2" required>
                                             </div>
                                         </div>
                                         <div class="actions" style="margin-top:10px;">
@@ -1185,6 +1206,11 @@
                                                 <div class="field">
                                                     <label for="department_code_global_{{ $section->id }}_{{ $department->id }}">Codice</label>
                                                     <input id="department_code_global_{{ $section->id }}_{{ $department->id }}" type="text" name="code" maxlength="50" value="{{ $department->code }}">
+                                                </div>
+
+                                                <div class="field">
+                                                    <label for="department_readings_global_{{ $section->id }}_{{ $department->id }}">Numero letture</label>
+                                                    <input id="department_readings_global_{{ $section->id }}_{{ $department->id }}" type="number" name="readings_count" min="1" max="10" value="{{ $department->readings_count }}" required>
                                                 </div>
 
                                                 <div class="field">
@@ -1228,6 +1254,17 @@
             @forelse ($filteredSections as $section)
                 @php
                     $groupedPoints = $section->samplingPoints->groupBy(fn ($point) => $point->department?->name ?: 'Senza reparto');
+                    $sectionMaximumReadings = max(1, (int) $section->departments->max('readings_count'));
+                    $sectionProductionPhases = ['sampling' => 'Fase campionamento'];
+                    foreach (range(1, $sectionMaximumReadings) as $readingNumber) {
+                        $sectionProductionPhases["reading_{$readingNumber}"] = "Lettura {$readingNumber}";
+                    }
+                    $currentReadingNumber = preg_match('/^reading_([1-9][0-9]*)$/', $productionPhase, $readingMatches) ? (int) $readingMatches[1] : null;
+                    if ($currentReadingNumber) {
+                        $groupedPoints = $groupedPoints->map(fn ($points) => $points->filter(
+                            fn ($point) => $currentReadingNumber <= (int) ($point->department?->readings_count ?? 2)
+                        ))->filter(fn ($points) => $points->isNotEmpty());
+                    }
                     $sectionSampleKind = $section->samplingPoints
                         ->where('legacy_code', 'not like', 'NEG%')
                         ->pluck('sample_kind')
@@ -1235,6 +1272,12 @@
                         ->first() ?? $section->samplingPoints->pluck('sample_kind')->filter()->first();
                     $isEditingSection = $editingCheck && (int) $editingCheck->monitoring_section_id === (int) $section->id;
                     $editingPointResults = $isEditingSection ? $editingCheck->pointResults->keyBy('sampling_point_id') : collect();
+                    $phaseStates = $isEditingSection ? $editingCheck->phaseStates->keyBy('phase') : collect();
+                    $activePhaseState = $phaseStates->get($productionPhase);
+                    $phaseSignerId = $activePhaseState?->signed_by_user_id;
+                    $phaseReopenedAt = $activePhaseState?->reopened_at;
+                    $phaseSigned = filled($phaseSignerId);
+                    $productionPhaseLocked = $isEditingSection && $phaseSigned && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id());
                 @endphp
                 <details class="section" @if($isEditingSection) open @endif>
                     <summary>
@@ -1477,26 +1520,15 @@
                                 </div>
 
                                     <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
-                                        @foreach ($productionPhases as $phaseKey => $phaseLabel)
-                                            @if ($phaseKey === 'sampling' || ($phaseKey === 'first_reading' && filled($editingCheck?->sampling_completed_by_user_id)) || ($phaseKey === 'second_reading' && filled($editingCheck?->first_reading_completed_by_user_id)))
+                                        @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
+                                            @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
+                                            @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
                                                 <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'clean_room', 'sub' => $currentSubEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
                                         @endforeach
                                     </div>
-
-                                    @if ($productionPhase === 'sampling')
-                                        @php($phaseSignerId = $editingCheck?->sampling_completed_by_user_id)
-                                        @php($phaseReopenedAt = $editingCheck?->sampling_reopened_at)
-                                    @elseif ($productionPhase === 'first_reading')
-                                        @php($phaseSignerId = $editingCheck?->first_reading_completed_by_user_id)
-                                        @php($phaseReopenedAt = $editingCheck?->first_reading_reopened_at)
-                                    @else
-                                        @php($phaseSignerId = $editingCheck?->second_reading_completed_by_user_id)
-                                        @php($phaseReopenedAt = $editingCheck?->second_reading_reopened_at)
-                                    @endif
-                                    @php($productionPhaseLocked = filled($phaseSignerId) && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id()))
 
                                     <div class="table-scroll @if ($productionPhaseLocked) production-phase-locked @endif">
                                     <table>
@@ -1519,9 +1551,9 @@
                                                 <th>Ora campionamento</th>
                                             </tr>
                                         @elseif ($sectionSampleKind === 'surface_swab')
-                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>{{ $productionPhase === 'first_reading' ? '1a lettura' : '2a lettura' }}</th></tr>
+                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>Lettura {{ $currentReadingNumber }}</th></tr>
                                         @else
-                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>UFC {{ $productionPhase === 'first_reading' ? '1a' : '2a' }} lettura</th></tr>
+                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>UFC lettura {{ $currentReadingNumber }}</th></tr>
                                         @endif
                                         </thead>
                                         <tbody>
@@ -1539,6 +1571,8 @@
                                                     </td>
                                                     <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
                                                     <td>{{ $point->area_label ?: '-' }}</td>
+                                                    @php($pointResult = $editingPointResults->get($point->id))
+                                                    @php($pointReading = $currentReadingNumber && $pointResult ? $pointResult->readings->firstWhere('reading_number', $currentReadingNumber) : null)
                                                     @if ($productionPhase === 'sampling')
                                                         <td>
                                                             <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ substr((string) old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')), 0, 5) }}">
@@ -1548,21 +1582,13 @@
                                                         <td>
                                                             <input type="time" name="points[{{ $point->id }}][exposure_ended_at]" value="{{ substr((string) old("points.{$point->id}.exposure_ended_at", data_get($editingPointResults->get($point->id), 'exposure_ended_at')), 0, 5) }}">
                                                         </td>
-                                                    @elseif ($productionPhase === 'first_reading' && $sectionSampleKind === 'surface_swab')
+                                                    @elseif ($currentReadingNumber && $sectionSampleKind === 'surface_swab')
                                                         <td>
-                                                            <select name="points[{{ $point->id }}][first_growth_result]"><option value="">-</option><option value="growth" @selected(old("points.{$point->id}.first_growth_result", data_get($editingPointResults->get($point->id), 'first_growth_result')) === 'growth')>Crescita</option><option value="no_growth" @selected(old("points.{$point->id}.first_growth_result", data_get($editingPointResults->get($point->id), 'first_growth_result')) === 'no_growth')>Non crescita</option></select>
+                                                            <select name="points[{{ $point->id }}][reading_growth_result]"><option value="">-</option><option value="growth" @selected(old("points.{$point->id}.reading_growth_result", $pointReading?->growth_result) === 'growth')>Crescita</option><option value="no_growth" @selected(old("points.{$point->id}.reading_growth_result", $pointReading?->growth_result) === 'no_growth')>Non crescita</option></select>
                                                         </td>
-                                                    @elseif ($productionPhase === 'second_reading' && $sectionSampleKind === 'surface_swab')
+                                                    @elseif ($currentReadingNumber)
                                                         <td>
-                                                            <select name="points[{{ $point->id }}][second_growth_result]"><option value="">-</option><option value="growth" @selected(old("points.{$point->id}.second_growth_result", data_get($editingPointResults->get($point->id), 'second_growth_result')) === 'growth')>Crescita</option><option value="no_growth" @selected(old("points.{$point->id}.second_growth_result", data_get($editingPointResults->get($point->id), 'second_growth_result')) === 'no_growth')>Non crescita</option></select>
-                                                        </td>
-                                                    @elseif ($productionPhase === 'first_reading')
-                                                        <td>
-                                                            <input type="number" min="0" name="points[{{ $point->id }}][first_cfu_count]" value="{{ old("points.{$point->id}.first_cfu_count", data_get($editingPointResults->get($point->id), 'first_cfu_count')) }}">
-                                                        </td>
-                                                    @elseif ($productionPhase === 'second_reading')
-                                                        <td>
-                                                            <input type="number" min="0" name="points[{{ $point->id }}][second_cfu_count]" value="{{ old("points.{$point->id}.second_cfu_count", data_get($editingPointResults->get($point->id), 'second_cfu_count')) }}">
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][reading_cfu_count]" value="{{ old("points.{$point->id}.reading_cfu_count", $pointReading?->cfu_count) }}">
                                                         </td>
                                                     @endif
                                                 </tr>
@@ -1571,14 +1597,6 @@
                                         </tbody>
                                     </table>
                                 </div>
-
-                                @if ($productionPhase === 'sampling')
-                                    @php($phaseSigned = filled($editingCheck?->sampling_completed_by_user_id))
-                                @elseif ($productionPhase === 'first_reading')
-                                    @php($phaseSigned = filled($editingCheck?->first_reading_completed_by_user_id))
-                                @else
-                                    @php($phaseSigned = filled($editingCheck?->second_reading_completed_by_user_id))
-                                @endif
 
                                 <div class="field @if ($productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;">
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
@@ -1592,7 +1610,7 @@
                                                 <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
                                                 <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000">{{ old('reopening_reason') }}</textarea>
                                             </div>
-                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $productionPhases[$productionPhase] }}</button>
+                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $sectionProductionPhases[$productionPhase] }}</button>
                                         @else
                                             <p class="hint">Questa fase e firmata e bloccata. Solo l'operatore che l'ha firmata puo riaprirla indicando una motivazione.</p>
                                         @endif
@@ -1602,7 +1620,7 @@
                                         <p class="hint">Salvataggio puntuale per singola fase Clean room.</p>
                                         <button type="submit">{{ $isEditingSection ? 'Aggiorna fase' : 'Salva fase' }}</button>
                                         @if (! $phaseSigned || filled($phaseReopenedAt))
-                                            <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }}</button>
+                                            <button type="submit" name="sign_phase" value="1">Firma {{ $sectionProductionPhases[$productionPhase] }}</button>
                                         @endif
                                     </div>
                                 @endif
@@ -1825,28 +1843,15 @@
                                 @else
                                 @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
-                                        @foreach ($productionPhases as $phaseKey => $phaseLabel)
-                                            @if ($phaseKey === 'sampling' || ($phaseKey === 'first_reading' && filled($editingCheck?->sampling_completed_by_user_id)) || ($phaseKey === 'second_reading' && filled($editingCheck?->first_reading_completed_by_user_id)))
+                                        @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
+                                            @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
+                                            @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
                                                 <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
                                         @endforeach
                                     </div>
-                                @endif
-
-                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
-                                    @if ($productionPhase === 'sampling')
-                                        @php($phaseSignerId = $editingCheck?->sampling_completed_by_user_id)
-                                        @php($phaseReopenedAt = $editingCheck?->sampling_reopened_at)
-                                    @elseif ($productionPhase === 'first_reading')
-                                        @php($phaseSignerId = $editingCheck?->first_reading_completed_by_user_id)
-                                        @php($phaseReopenedAt = $editingCheck?->first_reading_reopened_at)
-                                    @else
-                                        @php($phaseSignerId = $editingCheck?->second_reading_completed_by_user_id)
-                                        @php($phaseReopenedAt = $editingCheck?->second_reading_reopened_at)
-                                    @endif
-                                    @php($productionPhaseLocked = filled($phaseSignerId) && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id()))
                                 @endif
 
                                 <div class="table-scroll @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif">
@@ -1888,10 +1893,10 @@
                                                         <th>Operativo</th>
                                                         <th>Lotto prodotto</th>
                                                     @endif
-                                                @elseif ($productionPhase === 'first_reading')
-                                                    <th>{{ $currentEnvironment === 'produzione' ? 'UFC/m3' : 'UFC/piastra' }} (prima lettura)</th>
+                                                @elseif ($currentReadingNumber)
+                                                    <th>{{ $currentEnvironment === 'produzione' ? 'UFC/m3' : 'UFC/piastra' }} (lettura {{ $currentReadingNumber }})</th>
                                                 @else
-                                                    <th>{{ $currentEnvironment === 'produzione' ? 'UFC/m3' : 'UFC/piastra' }} (seconda lettura)</th>
+                                                    <th>Valore lettura</th>
                                                 @endif
                                             </tr>
                                         @else
@@ -1980,6 +1985,8 @@
                                                         </td>
                                                         <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
                                                         <td>{{ $point->area_label ?: '-' }}</td>
+                                                        @php($pointResult = $editingPointResults->get($point->id))
+                                                        @php($pointReading = $currentReadingNumber && $pointResult ? $pointResult->readings->firstWhere('reading_number', $currentReadingNumber) : null)
                                                         @if ($productionPhase === 'sampling')
                                                             <td>
                                                                 <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ substr((string) old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')), 0, 5) }}">
@@ -2004,13 +2011,9 @@
                                                                     @endif
                                                                 </td>
                                                             @endif
-                                                        @elseif ($productionPhase === 'first_reading')
+                                                        @elseif ($currentReadingNumber)
                                                             <td>
-                                                                <input type="number" min="0" name="points[{{ $point->id }}][first_cfu_count]" value="{{ old("points.{$point->id}.first_cfu_count", data_get($editingPointResults->get($point->id), 'first_cfu_count')) }}">
-                                                            </td>
-                                                        @else
-                                                            <td>
-                                                                <input type="number" min="0" name="points[{{ $point->id }}][second_cfu_count]" value="{{ old("points.{$point->id}.second_cfu_count", data_get($editingPointResults->get($point->id), 'second_cfu_count')) }}">
+                                                                <input type="number" min="0" name="points[{{ $point->id }}][reading_cfu_count]" value="{{ old("points.{$point->id}.reading_cfu_count", $pointReading?->cfu_count) }}">
                                                             </td>
                                                         @endif
                                                     @else
@@ -2058,16 +2061,6 @@
                                 </div>
                                 @endif
 
-                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
-                                    @if ($productionPhase === 'sampling')
-                                        @php($phaseSigned = filled($editingCheck?->sampling_completed_by_user_id))
-                                    @elseif ($productionPhase === 'first_reading')
-                                        @php($phaseSigned = filled($editingCheck?->first_reading_completed_by_user_id))
-                                    @else
-                                        @php($phaseSigned = filled($editingCheck?->second_reading_completed_by_user_id))
-                                    @endif
-                                @endif
-
                                 <div class="field @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
@@ -2080,7 +2073,7 @@
                                                 <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
                                                 <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000">{{ old('reopening_reason') }}</textarea>
                                             </div>
-                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $productionPhases[$productionPhase] }}</button>
+                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $sectionProductionPhases[$productionPhase] }}</button>
                                         @else
                                             <p class="hint">Questa fase e firmata e bloccata. Solo l'operatore che l'ha firmata puo riaprirla indicando una motivazione.</p>
                                         @endif
@@ -2090,7 +2083,7 @@
                                         <p class="hint">Salvataggio puntuale per singola sezione.</p>
                                         <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
                                         @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && (! $phaseSigned || filled($phaseReopenedAt)))
-                                            <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }}</button>
+                                            <button type="submit" name="sign_phase" value="1">Firma {{ $sectionProductionPhases[$productionPhase] }}</button>
                                         @endif
                                     </div>
                                 @endif

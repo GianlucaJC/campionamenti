@@ -20,6 +20,7 @@ class MonitoringDepartment extends Model
         'monitoring_section_id',
         'code',
         'name',
+        'readings_count',
         'sort_order',
         'is_active',
     ];

@@ -274,7 +274,7 @@ class MonitoringTemplateSeeder extends Seeder
                     'name' => 'Reparto Piastre Superfici 1',
                     'description' => 'Campionamento superfici con contact plates.',
                     'sort_order' => 50,
-                    'is_active' => true,
+                    'is_active' => false,
                 ],
                 'departments' => [
                     ['code' => 'ambiente', 'name' => 'Ambiente', 'sort_order' => 10],

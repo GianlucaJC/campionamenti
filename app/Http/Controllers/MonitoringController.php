@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MicrobiologicalCheck;
 use App\Models\MicrobiologicalCheckPoint;
 use App\Models\MicrobiologicalCheckPhaseLog;
+use App\Models\MicrobiologicalCheckPhaseState;
 use App\Models\MonitoringDepartment;
 use App\Models\MonitoringSection;
 use App\Models\SamplingPoint;
@@ -69,9 +70,10 @@ class MonitoringController extends Controller
         ];
 
         $includeInactivePoints = $request->user()?->isAdmin() && $currentView === 'gestione-punti';
+        $includeInactiveSections = $request->user()?->isAdmin() && $currentView === 'gestione-reparti';
 
         $sections = MonitoringSection::query()
-            ->where('is_active', true)
+            ->when(! $includeInactiveSections, fn ($query) => $query->where('is_active', true))
             ->with(['departments' => function ($query) {
                 $query->orderBy('sort_order')->orderBy('name');
             }])
@@ -96,14 +98,9 @@ class MonitoringController extends Controller
 
         $availableSubEnvironments = collect($subEnvironmentLabels[$currentEnvironment] ?? []);
         $currentSubEnvironment = null;
-        $productionPhases = [
-            'sampling' => 'Fase campionamento',
-            'first_reading' => 'Prima lettura',
-            'second_reading' => 'Seconda lettura',
-        ];
         $productionPhase = (string) $request->query('phase', 'sampling');
 
-        if (! array_key_exists($productionPhase, $productionPhases)) {
+        if (! preg_match('/^(sampling|reading_[1-9][0-9]*)$/', $productionPhase)) {
             $productionPhase = 'sampling';
         }
 
@@ -130,6 +127,19 @@ class MonitoringController extends Controller
                 return (($section->sub_environment ?: null) === $currentSubEnvironment);
             })
             ->values();
+
+        $maximumReadings = max(1, (int) $filteredSections
+            ->flatMap(fn (MonitoringSection $section) => $section->departments)
+            ->max('readings_count'));
+        $productionPhases = ['sampling' => 'Fase campionamento'];
+
+        foreach (range(1, $maximumReadings) as $readingNumber) {
+            $productionPhases["reading_{$readingNumber}"] = "Lettura {$readingNumber}";
+        }
+
+        if (! array_key_exists($productionPhase, $productionPhases)) {
+            $productionPhase = 'sampling';
+        }
 
         $archiveFrom = $request->query('archive_from');
         $archiveTo = $request->query('archive_to');
@@ -189,7 +199,7 @@ class MonitoringController extends Controller
         $editingCheckId = $request->query('edit_check');
         if ($currentView === 'nuovo' && filled($editingCheckId)) {
             $editingCheck = MicrobiologicalCheck::query()
-                ->with(['pointResults'])
+                ->with(['pointResults.readings', 'phaseStates'])
                 ->whereKey($editingCheckId)
                 ->first();
 
@@ -274,6 +284,7 @@ class MonitoringController extends Controller
         }
 
         $pointCollection = $section->samplingPoints()
+            ->with('department')
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get();
@@ -284,8 +295,7 @@ class MonitoringController extends Controller
         $isPhasedEnvironment = $this->isPhasedEnvironment($section);
 
         if ($isPhasedEnvironment) {
-            $this->ensureProductionPhaseCanBeAccessed($data);
-            $this->addProductionPhaseSigner($data, $userId);
+            $this->ensureProductionPhaseCanBeAccessed($data, $section);
         }
 
         $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId, $isPhasedEnvironment): int {
@@ -297,6 +307,7 @@ class MonitoringController extends Controller
 
             $this->persistCheck($check, $data, $pointCollection);
             if ($isPhasedEnvironment) {
+                $this->signProductionPhase($check, $data, $userId);
                 $this->recordProductionPhaseLog($check, $data, $userId);
             }
 
@@ -331,6 +342,7 @@ class MonitoringController extends Controller
         }
 
         $pointCollection = $section->samplingPoints()
+            ->with('department')
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get();
@@ -370,7 +382,7 @@ class MonitoringController extends Controller
                 ->with('status', "Sezione '{$section->name}' aggiornata con successo.");
         }
 
-        $this->ensureProductionPhaseCanBeAccessed($data, $check);
+        $this->ensureProductionPhaseCanBeAccessed($data, $section, $check);
         $isReopening = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
 
         if ($isReopening) {
@@ -390,10 +402,9 @@ class MonitoringController extends Controller
                 ->with('status', "Fase della sezione '{$section->name}' riaperta in scrittura.");
         }
 
-        $this->addProductionPhaseSigner($data, $userId);
-
         DB::transaction(function () use ($check, $data, $pointCollection, $userId): void {
             $this->persistCheck($check, $data, $pointCollection);
+            $this->signProductionPhase($check, $data, $userId);
             $this->recordProductionPhaseLog($check, $data, $userId);
         });
 
@@ -414,7 +425,7 @@ class MonitoringController extends Controller
     private function buildCheckRules($pointCollection): array
     {
         $rules = [
-            'entry_phase' => ['nullable', 'in:sampling,first_reading,second_reading'],
+            'entry_phase' => ['nullable', 'regex:/^(sampling|reading_[1-9][0-9]*)$/'],
             'sign_phase' => ['nullable', 'boolean'],
             'save_header' => ['nullable', 'boolean'],
             'reopen_phase' => ['nullable', 'boolean'],
@@ -464,6 +475,8 @@ class MonitoringController extends Controller
             $rules["{$prefix}.cfu_count"] = ['nullable', 'integer', 'min:0'];
             $rules["{$prefix}.first_cfu_count"] = ['nullable', 'integer', 'min:0'];
             $rules["{$prefix}.second_cfu_count"] = ['nullable', 'integer', 'min:0'];
+            $rules["{$prefix}.reading_cfu_count"] = ['nullable', 'integer', 'min:0'];
+            $rules["{$prefix}.reading_growth_result"] = ['nullable', 'in:growth,no_growth'];
             $rules["{$prefix}.notes"] = ['nullable', 'string', 'max:500'];
 
             if ($point->sample_kind === 'air_passive') {
@@ -548,7 +561,11 @@ class MonitoringController extends Controller
     /**
      * Prevent access to production reading phases before their preceding phase is signed.
      */
-    private function ensureProductionPhaseCanBeAccessed(array $data, ?MicrobiologicalCheck $check = null): void
+    private function ensureProductionPhaseCanBeAccessed(
+        array $data,
+        MonitoringSection $section,
+        ?MicrobiologicalCheck $check = null
+    ): void
     {
         $phase = $data['entry_phase'] ?? null;
 
@@ -556,35 +573,40 @@ class MonitoringController extends Controller
             return;
         }
 
-        if ($phase === 'first_reading' && ! filled($check?->sampling_completed_by_user_id)) {
+        $readingNumber = $this->readingNumber($phase);
+        $maximumReadings = max(1, (int) $section->departments()->max('readings_count'));
+
+        if ($readingNumber && $readingNumber > $maximumReadings) {
             throw ValidationException::withMessages([
-                'entry_phase' => 'Completa e firma prima la fase di campionamento.',
+                'entry_phase' => 'La lettura selezionata non e configurata per questa sezione.',
             ]);
         }
 
-        if ($phase === 'second_reading' && ! filled($check?->first_reading_completed_by_user_id)) {
+        $previousPhase = $this->previousProductionPhase($phase);
+
+        if ($previousPhase && ! $this->isProductionPhaseSigned($check, $previousPhase)) {
             throw ValidationException::withMessages([
-                'entry_phase' => 'Completa e firma prima la prima lettura.',
+                'entry_phase' => "Completa e firma prima {$this->productionPhaseLabel($previousPhase)}.",
             ]);
         }
     }
 
-    /**
-     * Record the authenticated operator only when the dedicated phase-signing action is used.
-     */
-    private function addProductionPhaseSigner(array &$data, int $userId): void
+    private function signProductionPhase(MicrobiologicalCheck $check, array $data, int $userId): void
     {
         if (empty($data['sign_phase']) || empty($data['entry_phase'])) {
             return;
         }
 
-        $signerFields = [
-            'sampling' => 'sampling_completed_by_user_id',
-            'first_reading' => 'first_reading_completed_by_user_id',
-            'second_reading' => 'second_reading_completed_by_user_id',
-        ];
-
-        $data[$signerFields[$data['entry_phase']]] = $userId;
+        $check->phaseStates()->updateOrCreate(
+            ['phase' => $data['entry_phase']],
+            [
+                'signed_by_user_id' => $userId,
+                'signed_at' => now(),
+                'reopened_by_user_id' => null,
+                'reopened_at' => null,
+                'reopening_reason' => null,
+            ]
+        );
     }
 
     /**
@@ -598,17 +620,8 @@ class MonitoringController extends Controller
             return false;
         }
 
-        $signerFields = [
-            'sampling' => 'sampling_completed_by_user_id',
-            'first_reading' => 'first_reading_completed_by_user_id',
-            'second_reading' => 'second_reading_completed_by_user_id',
-        ];
-        $reopenedAtFields = [
-            'sampling' => 'sampling_reopened_at',
-            'first_reading' => 'first_reading_reopened_at',
-            'second_reading' => 'second_reading_reopened_at',
-        ];
-        $signerId = $check->{$signerFields[$phase]};
+        $state = $this->productionPhaseState($check, $phase);
+        $signerId = $state?->signed_by_user_id;
 
         if (! $signerId) {
             return false;
@@ -620,7 +633,7 @@ class MonitoringController extends Controller
             ]);
         }
 
-        if (filled($check->{$reopenedAtFields[$phase]})) {
+        if (filled($state?->reopened_at)) {
             return false;
         }
 
@@ -644,18 +657,10 @@ class MonitoringController extends Controller
      */
     private function reopenProductionPhase(MicrobiologicalCheck $check, array $data, int $userId): void
     {
-        $phase = $data['entry_phase'];
-        $reopenFields = [
-            'sampling' => ['by' => 'sampling_reopened_by_user_id', 'at' => 'sampling_reopened_at', 'reason' => 'sampling_reopening_reason'],
-            'first_reading' => ['by' => 'first_reading_reopened_by_user_id', 'at' => 'first_reading_reopened_at', 'reason' => 'first_reading_reopening_reason'],
-            'second_reading' => ['by' => 'second_reading_reopened_by_user_id', 'at' => 'second_reading_reopened_at', 'reason' => 'second_reading_reopening_reason'],
-        ];
-        $fields = $reopenFields[$phase];
-
-        $check->update([
-            $fields['by'] => $userId,
-            $fields['at'] => now(),
-            $fields['reason'] => $data['reopening_reason'],
+        $this->productionPhaseState($check, $data['entry_phase'])?->update([
+            'reopened_by_user_id' => $userId,
+            'reopened_at' => now(),
+            'reopening_reason' => $data['reopening_reason'],
         ]);
     }
 
@@ -749,28 +754,7 @@ class MonitoringController extends Controller
 
         $phase = $data['entry_phase'] ?? null;
         if ($phase) {
-            $signerFields = [
-                'sampling' => 'sampling_completed_by_user_id',
-                'first_reading' => 'first_reading_completed_by_user_id',
-                'second_reading' => 'second_reading_completed_by_user_id',
-            ];
             $phasePayloadFields = ['sampled_on'];
-
-            if (! empty($data['sign_phase'])) {
-                $checkPayload[$signerFields[$phase]] = $data[$signerFields[$phase]] ?? null;
-                $phasePayloadFields[] = $signerFields[$phase];
-                $reopenFields = [
-                    'sampling' => ['sampling_reopened_by_user_id', 'sampling_reopened_at', 'sampling_reopening_reason'],
-                    'first_reading' => ['first_reading_reopened_by_user_id', 'first_reading_reopened_at', 'first_reading_reopening_reason'],
-                    'second_reading' => ['second_reading_reopened_by_user_id', 'second_reading_reopened_at', 'second_reading_reopening_reason'],
-                ];
-
-                foreach ($reopenFields[$phase] as $field) {
-                    $data[$field] = null;
-                    $checkPayload[$field] = null;
-                    $phasePayloadFields[] = $field;
-                }
-            }
 
             $checkPayload = array_intersect_key($checkPayload, array_flip($phasePayloadFields));
         }
@@ -782,6 +766,11 @@ class MonitoringController extends Controller
 
         foreach ($pointCollection as $point) {
             $pointInput = $data['points'][$point->id] ?? [];
+            $readingNumber = $this->readingNumber($data['entry_phase'] ?? null);
+
+            if ($readingNumber && $readingNumber > (int) ($point->department?->readings_count ?? 2)) {
+                continue;
+            }
 
             $hasValue = collect($pointInput)
                 ->filter(fn ($value) => $value !== null && $value !== '')
@@ -850,14 +839,16 @@ class MonitoringController extends Controller
                 }
             }
 
-            if (($data['entry_phase'] ?? null) === 'first_reading') {
+            if ($readingNumber === 1) {
                 $payload = array_intersect_key($payload, array_flip([
                     'first_cfu_count',
                     'first_growth_result',
                 ]));
+                $payload['first_cfu_count'] = $pointInput['reading_cfu_count'] ?? null;
+                $payload['first_growth_result'] = $pointInput['reading_growth_result'] ?? null;
             }
 
-            if (($data['entry_phase'] ?? null) === 'second_reading') {
+            if ($readingNumber === 2) {
                 $payload = array_intersect_key($payload, array_flip([
                     'second_cfu_count',
                     'second_growth_result',
@@ -867,6 +858,13 @@ class MonitoringController extends Controller
                 if (array_key_exists('second_cfu_count', $pointInput)) {
                     $payload['cfu_count'] = $pointInput['second_cfu_count'];
                 }
+                $payload['second_cfu_count'] = $pointInput['reading_cfu_count'] ?? null;
+                $payload['second_growth_result'] = $pointInput['reading_growth_result'] ?? null;
+                $payload['cfu_count'] = $pointInput['reading_cfu_count'] ?? null;
+            }
+
+            if ($readingNumber && $readingNumber > 2) {
+                $payload = [];
             }
 
             if ($existingResult) {
@@ -879,13 +877,68 @@ class MonitoringController extends Controller
             if ($existingResult) {
                 $existingResult->update($payload);
             } else {
-                $check->pointResults()->create(array_merge($payload, [
+                $existingResult = $check->pointResults()->create(array_merge($payload, [
                     'sampling_point_id' => $point->id,
                 ]));
             }
 
+            if ($readingNumber) {
+                $readingPayload = [
+                    'cfu_count' => $pointInput['reading_cfu_count'] ?? null,
+                    'growth_result' => $pointInput['reading_growth_result'] ?? null,
+                ];
+
+                if (collect($readingPayload)->filter(fn ($value) => $value !== null && $value !== '')->isNotEmpty()) {
+                    $existingResult->readings()->updateOrCreate(
+                        ['reading_number' => $readingNumber],
+                        $readingPayload
+                    );
+                }
+            }
+
             $touchedPointIds[] = $point->id;
         }
+    }
+
+    private function previousProductionPhase(string $phase): ?string
+    {
+        $readingNumber = $this->readingNumber($phase);
+
+        if (! $readingNumber) {
+            return null;
+        }
+
+        return $readingNumber === 1 ? 'sampling' : 'reading_'.($readingNumber - 1);
+    }
+
+    private function readingNumber(?string $phase): ?int
+    {
+        if (! $phase || ! preg_match('/^reading_([1-9][0-9]*)$/', $phase, $matches)) {
+            return null;
+        }
+
+        return (int) $matches[1];
+    }
+
+    private function productionPhaseLabel(string $phase): string
+    {
+        $readingNumber = $this->readingNumber($phase);
+
+        return $readingNumber ? "la lettura {$readingNumber}" : 'la fase di campionamento';
+    }
+
+    private function productionPhaseState(MicrobiologicalCheck $check, string $phase): ?MicrobiologicalCheckPhaseState
+    {
+        if ($check->relationLoaded('phaseStates')) {
+            return $check->phaseStates->firstWhere('phase', $phase);
+        }
+
+        return $check->phaseStates()->where('phase', $phase)->first();
+    }
+
+    private function isProductionPhaseSigned(?MicrobiologicalCheck $check, string $phase): bool
+    {
+        return $check && filled($this->productionPhaseState($check, $phase)?->signed_by_user_id);
     }
 
     /**
@@ -1060,6 +1113,7 @@ class MonitoringController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'code' => ['nullable', 'string', 'max:50'],
+            'readings_count' => ['required', 'integer', 'min:1', 'max:10'],
         ]);
 
         $name = trim($data['name']);
@@ -1071,7 +1125,7 @@ class MonitoringController extends Controller
         if ($exists) {
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->withErrors(['name' => 'Esiste gia un reparto con questo nome nella sezione selezionata.']);
@@ -1082,13 +1136,14 @@ class MonitoringController extends Controller
         $section->departments()->create([
             'name' => $name,
             'code' => filled($data['code'] ?? null) ? trim((string) $data['code']) : null,
+            'readings_count' => $data['readings_count'],
             'sort_order' => $lastSortOrder + 10,
             'is_active' => true,
         ]);
 
         return redirect()
             ->route('monitoraggi.index', [
-                'view' => 'gestione-punti',
+                'view' => 'gestione-reparti',
                 'env' => $section->environment ?: 'produzione',
             ])
             ->with('status', "Nuovo reparto aggiunto in '{$section->name}'.");
@@ -1105,7 +1160,7 @@ class MonitoringController extends Controller
         if ((int) $department->monitoring_section_id !== (int) $section->id) {
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->withErrors(['department' => 'Il reparto selezionato non appartiene alla sezione scelta.']);
@@ -1119,7 +1174,7 @@ class MonitoringController extends Controller
 
                 return redirect()
                     ->route('monitoraggi.index', [
-                        'view' => 'gestione-punti',
+                        'view' => 'gestione-reparti',
                         'env' => $section->environment ?: 'produzione',
                     ])
                     ->with('status', "Reparto '{$departmentName}' eliminato da '{$section->name}'.");
@@ -1133,7 +1188,7 @@ class MonitoringController extends Controller
 
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->with('status', $targetActive
@@ -1144,6 +1199,7 @@ class MonitoringController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'code' => ['nullable', 'string', 'max:50'],
+            'readings_count' => ['required', 'integer', 'min:1', 'max:10'],
             'is_active' => ['required', 'boolean'],
         ]);
 
@@ -1157,7 +1213,7 @@ class MonitoringController extends Controller
         if ($duplicate) {
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->withErrors(['name' => 'Esiste gia un reparto con questo nome nella sezione selezionata.']);
@@ -1166,15 +1222,40 @@ class MonitoringController extends Controller
         $department->update([
             'name' => $name,
             'code' => filled($data['code'] ?? null) ? trim((string) $data['code']) : null,
+            'readings_count' => $data['readings_count'],
             'is_active' => (bool) $data['is_active'],
         ]);
 
         return redirect()
             ->route('monitoraggi.index', [
-                'view' => 'gestione-punti',
+                'view' => 'gestione-reparti',
                 'env' => $section->environment ?: 'produzione',
             ])
             ->with('status', "Reparto aggiornato in '{$section->name}'.");
+    }
+
+    /**
+     * Hide or restore an entire monitoring section without changing its departments or points.
+     */
+    public function updateSectionVisibility(Request $request, MonitoringSection $section): RedirectResponse
+    {
+        $data = $request->validate([
+            'visibility_action' => ['required', 'in:hide,show'],
+        ]);
+
+        $isActive = $data['visibility_action'] === 'show';
+
+        $section->update(['is_active' => $isActive]);
+
+        return redirect()
+            ->route('monitoraggi.index', array_filter([
+                'view' => 'gestione-reparti',
+                'env' => $section->environment ?: 'produzione',
+                'sub' => $section->sub_environment ?: null,
+            ]))
+            ->with('status', $isActive
+                ? "Sezione '{$section->name}' riattivata."
+                : "Sezione '{$section->name}' oscurata per gli operatori.");
     }
 
     /**
@@ -1188,7 +1269,7 @@ class MonitoringController extends Controller
         if ((int) $department->monitoring_section_id !== (int) $section->id) {
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->withErrors(['department' => 'Il reparto selezionato non appartiene alla sezione scelta.']);
@@ -1207,7 +1288,7 @@ class MonitoringController extends Controller
         if ($index === false) {
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->withErrors(['department' => 'Reparto non trovato in elenco.']);
@@ -1218,7 +1299,7 @@ class MonitoringController extends Controller
         if (! isset($departments[$targetIndex])) {
             return redirect()
                 ->route('monitoraggi.index', [
-                    'view' => 'gestione-punti',
+                    'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
                 ->with('status', 'Il reparto e gia alla posizione limite.');
@@ -1239,7 +1320,7 @@ class MonitoringController extends Controller
 
         return redirect()
             ->route('monitoraggi.index', [
-                'view' => 'gestione-punti',
+                'view' => 'gestione-reparti',
                 'env' => $section->environment ?: 'produzione',
             ])
             ->with('status', "Ordine reparti aggiornato in '{$section->name}'.");

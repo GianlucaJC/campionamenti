@@ -104,4 +104,9 @@ class MicrobiologicalCheck extends Model
         return $this->hasMany(MicrobiologicalCheckPhaseLog::class)
             ->orderByDesc('logged_at');
     }
+
+    public function phaseStates(): HasMany
+    {
+        return $this->hasMany(MicrobiologicalCheckPhaseState::class);
+    }
 }

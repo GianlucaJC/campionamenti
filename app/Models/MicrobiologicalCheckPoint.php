@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MicrobiologicalCheckPoint extends Model
 {
@@ -61,5 +62,10 @@ class MicrobiologicalCheckPoint extends Model
     public function point(): BelongsTo
     {
         return $this->belongsTo(SamplingPoint::class, 'sampling_point_id');
+    }
+
+    public function readings(): HasMany
+    {
+        return $this->hasMany(MicrobiologicalCheckReading::class);
     }
 }
