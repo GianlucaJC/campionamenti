@@ -232,38 +232,137 @@ class MonitoringController extends Controller
             }
         }
 
-        $trendByEnvironment = collect();
-        $trendBySection = collect();
+        $trendEnvironments = collect($request->query('trend_environments', [$currentEnvironment]))
+            ->filter(fn ($environment) => is_string($environment) && array_key_exists($environment, $environmentLabels))
+            ->unique()
+            ->values();
+        if ($trendEnvironments->isEmpty()) {
+            $trendEnvironments = collect([$currentEnvironment]);
+        }
+
+        $trendFrom = $request->query('trend_from', Carbon::now()->subDays(90)->toDateString());
+        $trendTo = $request->query('trend_to', Carbon::now()->toDateString());
+        if (! filled($trendFrom) || ! filled($trendTo) || $trendFrom > $trendTo) {
+            $trendFrom = Carbon::now()->subDays(90)->toDateString();
+            $trendTo = Carbon::now()->toDateString();
+        }
+
+        $trendAvailablePoints = collect();
+        $trendPointIds = collect($request->query('trend_points', []))
+            ->map(fn ($pointId) => (int) $pointId)
+            ->filter()
+            ->unique()
+            ->values();
+        $loadedTrendEnvironments = collect($request->query('trend_loaded_environments', []))
+            ->filter(fn ($environment) => is_string($environment) && array_key_exists($environment, $environmentLabels))
+            ->unique()
+            ->values();
+        $trendSeries = ['labels' => [], 'datasets' => []];
 
         if ($currentView === 'trend' && $request->user()?->isAdmin()) {
-            $sinceDate = Carbon::now()->subDays(90)->toDateString();
-
-            $trendByEnvironment = MicrobiologicalCheck::query()
-                ->join('monitoring_sections', 'monitoring_sections.id', '=', 'microbiological_checks.monitoring_section_id')
-                ->whereDate('microbiological_checks.sampled_on', '>=', $sinceDate)
-                ->when($availableSubEnvironments->isNotEmpty(), function ($query) use ($currentSubEnvironment): void {
-                    $query->where('monitoring_sections.sub_environment', $currentSubEnvironment);
+            $trendAvailablePoints = SamplingPoint::query()
+                ->with('section:id,name,environment')
+                ->where('is_active', true)
+                ->whereHas('section', function ($query) use ($trendEnvironments): void {
+                    $query->where('is_active', true)
+                        ->whereIn('environment', $trendEnvironments);
                 })
-                ->selectRaw("COALESCE(monitoring_sections.environment, 'produzione') as environment")
-                ->selectRaw('COUNT(*) as checks_count')
-                ->groupBy('environment')
-                ->orderByDesc('checks_count')
+                ->orderBy('monitoring_section_id')
+                ->orderBy('sort_order')
                 ->get();
 
-            $trendBySection = MicrobiologicalCheck::query()
-                ->join('monitoring_sections', 'monitoring_sections.id', '=', 'microbiological_checks.monitoring_section_id')
-                ->whereDate('microbiological_checks.sampled_on', '>=', $sinceDate)
-                ->when($availableSubEnvironments->isNotEmpty(), function ($query) use ($currentSubEnvironment): void {
-                    $query->where('monitoring_sections.sub_environment', $currentSubEnvironment);
-                })
-                ->selectRaw("COALESCE(monitoring_sections.environment, 'produzione') as environment")
-                ->selectRaw('monitoring_sections.name as section_name')
-                ->selectRaw('COUNT(*) as checks_count')
-                ->groupBy('environment', 'section_name')
-                ->orderByDesc('checks_count')
-                ->orderBy('section_name')
-                ->get()
-                ->groupBy('environment');
+            $trendPointIds = $trendPointIds
+                ->intersect($trendAvailablePoints->pluck('id'))
+                ->values();
+
+            $newlySelectedEnvironments = $trendEnvironments->diff($loadedTrendEnvironments);
+            if ($newlySelectedEnvironments->isNotEmpty()) {
+                $trendPointIds = $trendPointIds
+                    ->merge($trendAvailablePoints
+                        ->filter(fn (SamplingPoint $point) => $newlySelectedEnvironments->contains($point->section?->environment ?: 'produzione'))
+                        ->pluck('id'))
+                    ->unique()
+                    ->values();
+            }
+
+            if ($trendPointIds->isNotEmpty()) {
+                $trendResults = MicrobiologicalCheckPoint::query()
+                    ->with([
+                        'check:id,sampled_on,deleted_at',
+                        'point:id,title,sample_kind,monitoring_section_id',
+                        'point.section:id,name,environment',
+                        'readings:id,microbiological_check_point_id,reading_number,cfu_count',
+                    ])
+                    ->whereIn('sampling_point_id', $trendPointIds)
+                    ->whereHas('check', function ($query) use ($trendFrom, $trendTo): void {
+                        $query->whereBetween('sampled_on', [$trendFrom, $trendTo]);
+                    })
+                    ->get()
+                    ->filter(fn (MicrobiologicalCheckPoint $result) => $result->check && ! $result->check->trashed())
+                    ->sortBy(fn (MicrobiologicalCheckPoint $result) => $result->check->sampled_on);
+
+                $measurements = [
+                    'cfu_count' => 'UFC',
+                    'first_cfu_count' => 'Lettura 1',
+                    'second_cfu_count' => 'Lettura 2',
+                    'aerobic_plate_cfu' => 'Aerobi UFC/piastra',
+                    'aerobic_cfu_per_ml' => 'Aerobi UFC/ml',
+                    'coliform_plate_cfu' => 'Coliformi UFC/piastra',
+                    'coliform_confirmed_cfu' => 'Coliformi UFC confermate',
+                    'coliform_cfu_per_100ml' => 'Coliformi UFC/100 ml',
+                    'pseudomonas_plate_cfu' => 'Pseudomonas UFC/piastra',
+                    'pseudomonas_confirmed_cfu' => 'Pseudomonas UFC confermate',
+                    'pseudomonas_cfu_per_100ml' => 'Pseudomonas UFC/100 ml',
+                    'enterococci_plate_cfu' => 'Enterococchi UFC/piastra',
+                    'enterococci_confirmed_cfu' => 'Enterococchi UFC confermate',
+                    'enterococci_cfu_per_100ml' => 'Enterococchi UFC/100 ml',
+                    'ph_value' => 'pH',
+                ];
+                $seriesByLabel = [];
+
+                foreach ($trendResults as $result) {
+                    $date = Carbon::parse($result->check->sampled_on)->toDateString();
+                    $pointLabel = ($result->point->section?->name ?: 'Sezione') . ' - ' . $result->point->title;
+
+                    foreach ($result->readings as $reading) {
+                        if ($reading->cfu_count === null) {
+                            continue;
+                        }
+
+                        $seriesByLabel["{$pointLabel} - Lettura {$reading->reading_number}"][$date] = (float) $reading->cfu_count;
+                    }
+
+                    foreach ($measurements as $column => $label) {
+                        $value = $result->{$column};
+                        if ($value === null || $value === '' || ! is_numeric($value)) {
+                            continue;
+                        }
+
+                        $seriesByLabel["{$pointLabel} - {$label}"][$date] = (float) $value;
+                    }
+                }
+
+                $labels = collect($seriesByLabel)
+                    ->flatMap(fn (array $series) => array_keys($series))
+                    ->unique()
+                    ->sort()
+                    ->values();
+                $palette = ['#12706b', '#d8702f', '#426f94', '#8b4f2f', '#6c8f3f', '#a33e65', '#6b5c98', '#1f7a75'];
+
+                $trendSeries = [
+                    'labels' => $labels->map(fn ($date) => Carbon::parse($date)->format('d/m/Y'))->all(),
+                    'datasets' => collect($seriesByLabel)->values()->map(function (array $series, int $index) use ($seriesByLabel, $labels, $palette): array {
+                        $label = array_keys($seriesByLabel)[$index];
+
+                        return [
+                            'label' => $label,
+                            'data' => $labels->map(fn ($date) => $series[$date] ?? null)->all(),
+                            'borderColor' => $palette[$index % count($palette)],
+                            'backgroundColor' => $palette[$index % count($palette)],
+                        ];
+                    })->all(),
+                ];
+            }
         }
 
         return view('monitoraggi.index', [
@@ -286,8 +385,12 @@ class MonitoringController extends Controller
             'archivePerPage' => $archivePerPage,
             'archiveStatus' => $archiveStatus,
             'editingCheck' => $editingCheck,
-            'trendByEnvironment' => $trendByEnvironment,
-            'trendBySection' => $trendBySection,
+            'trendEnvironments' => $trendEnvironments,
+            'trendFrom' => $trendFrom,
+            'trendTo' => $trendTo,
+            'trendAvailablePoints' => $trendAvailablePoints,
+            'trendPointIds' => $trendPointIds,
+            'trendSeries' => $trendSeries,
         ]);
     }
 

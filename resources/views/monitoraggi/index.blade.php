@@ -694,6 +694,87 @@
             margin-top: 12px;
         }
 
+        .trend-filters {
+            margin-top: 12px;
+            border: 1px solid #d7cab9;
+            border-radius: 10px;
+            background: #fff;
+            padding: 12px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .trend-environments,
+        .trend-points {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .trend-choice {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid #d7cab9;
+            border-radius: 8px;
+            background: #fffdf9;
+            padding: 7px 9px;
+            color: #455458;
+            font-size: 0.84rem;
+            font-weight: 600;
+        }
+
+        details.trend-points-group {
+            border: 1px solid #e5d8c8;
+            border-radius: 8px;
+            background: #fffdf9;
+            overflow: hidden;
+        }
+
+        .trend-points-group > summary {
+            padding: 9px 10px;
+            background: #faf5ed;
+        }
+
+        .trend-points-group[open] > summary {
+            border-bottom: 1px solid #eee2d3;
+        }
+
+        .trend-points-group .trend-points {
+            padding: 10px;
+        }
+
+        .trend-points-title {
+            color: #4d625f;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .trend-selection-count {
+            color: #6f5b44;
+            font-size: 0.76rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .trend-chart-wrap {
+            position: relative;
+            min-height: 420px;
+            margin-top: 14px;
+            border: 1px solid #d7cab9;
+            border-radius: 10px;
+            background: #fff;
+            padding: 14px;
+        }
+
+        .trend-summary-table {
+            margin-top: 14px;
+            border: 1px solid #d7cab9;
+            border-radius: 10px;
+            background: #fff;
+            overflow: hidden;
+        }
+
         details.point-creator {
             border: 1px dashed #cabca9;
             border-radius: 10px;
@@ -1164,33 +1245,101 @@
 
         @if ($currentView === 'trend' && auth()->user()?->isAdmin())
             <article class="trend-card">
-                <h2 class="section-title" style="margin-bottom: 8px;">Trend ultimi 90 giorni</h2>
-                <p class="hint">Sintesi quantitativa per ambiente e sezione.</p>
+                <h2 class="section-title" style="margin-bottom: 8px;">Trend campionamenti</h2>
+                <p class="hint">Confronta i risultati dei punti selezionati nell'intervallo indicato. Ogni lettura o parametro e rappresentato come serie distinta.</p>
 
-                <div class="trend-grid">
+                <form method="GET" action="{{ route('monitoraggi.index') }}" class="trend-filters" data-trend-filter>
+                    <input type="hidden" name="view" value="trend">
                     <div>
-                        <h3 style="margin: 0 0 8px;">Per ambiente</h3>
-                        @forelse ($trendByEnvironment as $row)
-                            <div class="archive-item" style="margin-bottom: 8px;">
-                                <strong>{{ $environmentLabels[$row->environment] ?? ucfirst(str_replace('_', ' ', $row->environment)) }}</strong>
-                                <span class="hint">Campionamenti: {{ $row->checks_count }}</span>
-                            </div>
+                        <span class="trend-points-title">Macro sezioni</span>
+                        <div class="trend-environments" style="margin-top:7px;">
+                            @foreach ($environmentLabels as $environment => $label)
+                                <label class="trend-choice">
+                                    <input type="checkbox" name="trend_environments[]" value="{{ $environment }}" @checked($trendEnvironments->contains($environment))>
+                                    {{ $label }}
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="archive-filters-grid">
+                        <div class="field">
+                            <label for="trend_from">Da data</label>
+                            <input id="trend_from" type="date" name="trend_from" value="{{ $trendFrom }}" required>
+                        </div>
+                        <div class="field">
+                            <label for="trend_to">A data</label>
+                            <input id="trend_to" type="date" name="trend_to" value="{{ $trendTo }}" required>
+                        </div>
+                        <div class="field">
+                            <button type="submit">Aggiorna grafico</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="actions" style="margin:0 0 7px;">
+                            <span class="trend-points-title">Punti di campionamento</span>
+                            @if ($trendAvailablePoints->isNotEmpty())
+                                <button type="button" class="btn-small soft-btn" data-trend-select-all>Seleziona tutti</button>
+                            @endif
+                        </div>
+                        @forelse ($trendAvailablePoints->groupBy(fn ($point) => $point->section?->environment ?: 'produzione') as $environment => $points)
+                            @php
+                                $selectedPointsInGroup = $points->filter(fn ($point) => $trendPointIds->contains($point->id))->count();
+                            @endphp
+                            <input type="hidden" name="trend_loaded_environments[]" value="{{ $environment }}">
+                            <details class="trend-points-group" data-trend-points-group data-trend-environment="{{ $environment }}">
+                                <summary>
+                                    <span class="trend-points-title">{{ $environmentLabels[$environment] ?? ucfirst(str_replace('_', ' ', $environment)) }}</span>
+                                    <span class="trend-selection-count" data-trend-selected-count>{{ $selectedPointsInGroup }} di {{ $points->count() }} selezionati</span>
+                                </summary>
+                                <div class="trend-points">
+                                    @foreach ($points as $point)
+                                        <label class="trend-choice">
+                                            <input type="checkbox" name="trend_points[]" value="{{ $point->id }}" @checked($trendPointIds->contains($point->id))>
+                                            {{ $point->section?->name }}: {{ $point->title }}
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </details>
                         @empty
-                            <p class="hint">Nessun dato disponibile.</p>
+                            <p class="hint">Seleziona almeno una macro sezione e aggiorna per caricare i punti disponibili.</p>
                         @endforelse
                     </div>
-                    <div>
-                        <h3 style="margin: 0 0 8px;">Per sezione</h3>
-                        @forelse (($trendBySection[$currentEnvironment] ?? collect()) as $row)
-                            <div class="archive-item" style="margin-bottom: 8px;">
-                                <strong>{{ $row->section_name }}</strong>
-                                <span class="hint">Campionamenti: {{ $row->checks_count }}</span>
-                            </div>
-                        @empty
-                            <p class="hint">Nessun dato disponibile per l'ambiente selezionato.</p>
-                        @endforelse
+                </form>
+
+                @if (count($trendSeries['datasets']))
+                    <div class="actions">
+                        <span class="hint">{{ count($trendSeries['datasets']) }} serie su {{ count($trendSeries['labels']) }} date. Clicca una voce in legenda per mostrarla o nasconderla.</span>
+                        <button type="button" class="btn-small" data-trend-export-pdf>Esporta PDF</button>
                     </div>
-                </div>
+                    <div class="trend-chart-wrap" id="trend-chart" data-trend-chart-section tabindex="-1">
+                        <canvas data-trend-chart aria-label="Grafico trend campionamenti"></canvas>
+                    </div>
+                    <div class="trend-summary-table table-scroll">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Serie</th>
+                                <th>Ultimo valore</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            @foreach ($trendSeries['datasets'] as $dataset)
+                                <tr>
+                                    <td>{{ $dataset['label'] }}</td>
+                                    <td>{{ collect($dataset['data'])->filter(fn ($value) => $value !== null)->last() ?? '-' }}</td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <script type="application/json" data-trend-series>@json($trendSeries)</script>
+                @elseif ($trendPointIds->isNotEmpty())
+                    <p class="hint" style="margin-top:14px;">Nessun valore numerico disponibile per i punti e l'intervallo selezionati.</p>
+                @else
+                    <p class="hint" style="margin-top:14px;">Seleziona uno o piu punti di campionamento e aggiorna il grafico.</p>
+                @endif
             </article>
         @endif
 
@@ -2231,6 +2380,141 @@
                 }
             });
         });
+
+        var trendFilter = document.querySelector('[data-trend-filter]');
+        if (trendFilter) {
+            var selectAllButton = trendFilter.querySelector('[data-trend-select-all]');
+            var updateTrendGroupSelectionCounts = function () {
+                trendFilter.querySelectorAll('[data-trend-points-group]').forEach(function (group) {
+                    var pointInputs = group.querySelectorAll('input[name="trend_points[]"]');
+                    var selectedCount = Array.from(pointInputs).filter(function (input) { return input.checked; }).length;
+                    var countNode = group.querySelector('[data-trend-selected-count]');
+
+                    if (countNode) {
+                        countNode.textContent = selectedCount + ' di ' + pointInputs.length + ' selezionati';
+                    }
+                });
+
+                if (selectAllButton) {
+                    var allPointInputs = trendFilter.querySelectorAll('input[name="trend_points[]"]');
+                    var hasUnselectedPoint = Array.from(allPointInputs).some(function (input) { return !input.checked; });
+                    selectAllButton.textContent = hasUnselectedPoint ? 'Seleziona tutti' : 'Deseleziona tutti';
+                }
+            };
+
+            trendFilter.querySelectorAll('input[name="trend_points[]"]').forEach(function (input) {
+                input.addEventListener('change', updateTrendGroupSelectionCounts);
+            });
+
+            trendFilter.querySelectorAll('input[name="trend_environments[]"]').forEach(function (environmentInput) {
+                environmentInput.addEventListener('change', function () {
+                    var group = trendFilter.querySelector('[data-trend-points-group][data-trend-environment="' + environmentInput.value + '"]');
+
+                    if (!group) {
+                        return;
+                    }
+
+                    group.querySelectorAll('input[name="trend_points[]"]').forEach(function (pointInput) {
+                        pointInput.checked = environmentInput.checked;
+                    });
+
+                    if (!environmentInput.checked) {
+                        group.open = false;
+                    }
+
+                    updateTrendGroupSelectionCounts();
+                });
+            });
+
+            if (selectAllButton) {
+                selectAllButton.addEventListener('click', function () {
+                    var pointInputs = trendFilter.querySelectorAll('input[name="trend_points[]"]');
+                    var shouldSelect = Array.from(pointInputs).some(function (input) { return !input.checked; });
+
+                    pointInputs.forEach(function (input) {
+                        input.checked = shouldSelect;
+                    });
+
+                    selectAllButton.textContent = shouldSelect ? 'Deseleziona tutti' : 'Seleziona tutti';
+                    updateTrendGroupSelectionCounts();
+                });
+            }
+
+            updateTrendGroupSelectionCounts();
+        }
+
+        var trendSeriesNode = document.querySelector('[data-trend-series]');
+        var trendCanvas = document.querySelector('[data-trend-chart]');
+        if (trendSeriesNode && trendCanvas && window.Chart) {
+            var trendSeries = JSON.parse(trendSeriesNode.textContent);
+            var hasScrolledToTrendChart = false;
+            var scrollToTrendChart = function () {
+                if (hasScrolledToTrendChart) {
+                    return;
+                }
+
+                hasScrolledToTrendChart = true;
+                var chartSection = document.querySelector('[data-trend-chart-section]');
+                if (!chartSection) {
+                    return;
+                }
+
+                chartSection.scrollIntoView({
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                    block: 'start',
+                });
+            };
+            var trendChart = new Chart(trendCanvas, {
+                type: 'line',
+                data: {
+                    labels: trendSeries.labels,
+                    datasets: trendSeries.datasets.map(function (dataset) {
+                        return Object.assign({
+                            tension: 0.25,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            spanGaps: true,
+                        }, dataset);
+                    }),
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        onComplete: scrollToTrendChart,
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } },
+                        tooltip: { enabled: true },
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Data campionamento' }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Valore rilevato' } },
+                    },
+                },
+            });
+
+            var exportButton = document.querySelector('[data-trend-export-pdf]');
+            if (exportButton && window.loadJsPdf) {
+                exportButton.addEventListener('click', function () {
+                    var from = document.querySelector('#trend_from').value;
+                    var to = document.querySelector('#trend_to').value;
+                    var image = trendChart.toBase64Image();
+
+                    window.loadJsPdf().then(function (JsPdf) {
+                        var documentPdf = new JsPdf({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                        documentPdf.setFontSize(16);
+                        documentPdf.text('Trend campionamenti', 14, 16);
+                        documentPdf.setFontSize(10);
+                        documentPdf.text('Intervallo: ' + from + ' - ' + to, 14, 23);
+                        documentPdf.addImage(image, 'PNG', 12, 29, 272, 145);
+                        documentPdf.save('trend-campionamenti-' + from + '-' + to + '.pdf');
+                    });
+                });
+            }
+        }
 
         document.querySelectorAll('[data-department-select]').forEach(function (departmentSelect) {
             var sectionId = departmentSelect.getAttribute('data-section-id');

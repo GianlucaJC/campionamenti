@@ -46,6 +46,14 @@ Il sistema salva solo il parametro compatibile con il tipo selezionato.
 - Ogni eliminazione e ripristino viene registrato in `microbiological_check_phase_logs`, con utente, data/ora e, quando richiesta, motivazione.
 - L'admin puo selezionare `Eliminati` nel filtro Stato dell'archivio e ripristinare il campionamento.
 
+## Trend
+
+Nel pannello admin, la vista `Trend` consente di selezionare una o piu macro sezioni (`Produzione`, `Clean room`, `Acque`, `Operatori`), i relativi punti di campionamento e un intervallo date.
+
+- Il grafico riporta i valori nel tempo con asse X sulle date di campionamento e asse Y sui valori rilevati.
+- Le letture e i parametri disponibili sono mostrati come serie separate, selezionabili dalla legenda.
+- Il grafico corrente puo essere esportato in PDF dal browser.
+
 ## Avvio rapido
 
 Prerequisiti:
