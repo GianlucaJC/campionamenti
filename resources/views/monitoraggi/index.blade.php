@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Campionamenti microbiologici</title>
+    @vite('resources/js/app.js')
     <style>
         @import url('https://fonts.bunny.net/css?family=ibm-plex-sans:300,400,500,600,700');
 
@@ -1257,42 +1258,46 @@
 
                                                 <div class="field">
                                                     <label for="department_name_global_{{ $section->id }}_{{ $department->id }}">Nome reparto</label>
-                                                    <input id="department_name_global_{{ $section->id }}_{{ $department->id }}" type="text" name="name" maxlength="120" value="{{ $department->name }}" required>
+                                                    <input id="department_name_global_{{ $section->id }}_{{ $department->id }}" type="text" name="name" maxlength="120" value="{{ $department->name }}" required @disabled($department->trashed())>
                                                 </div>
 
                                                 <div class="field">
                                                     <label for="department_code_global_{{ $section->id }}_{{ $department->id }}">Codice</label>
-                                                    <input id="department_code_global_{{ $section->id }}_{{ $department->id }}" type="text" name="code" maxlength="50" value="{{ $department->code }}">
+                                                    <input id="department_code_global_{{ $section->id }}_{{ $department->id }}" type="text" name="code" maxlength="50" value="{{ $department->code }}" @disabled($department->trashed())>
                                                 </div>
 
                                                 <div class="field">
                                                     <label for="department_readings_global_{{ $section->id }}_{{ $department->id }}">Numero letture</label>
-                                                    <input id="department_readings_global_{{ $section->id }}_{{ $department->id }}" type="number" name="readings_count" min="1" max="10" value="{{ $department->readings_count }}" required>
+                                                    <input id="department_readings_global_{{ $section->id }}_{{ $department->id }}" type="number" name="readings_count" min="1" max="10" value="{{ $department->readings_count }}" required @disabled($department->trashed())>
                                                 </div>
 
                                                 <div class="field">
                                                     <label for="department_active_global_{{ $section->id }}_{{ $department->id }}">Attivo</label>
-                                                    <select id="department_active_global_{{ $section->id }}_{{ $department->id }}" name="is_active">
+                                                    <select id="department_active_global_{{ $section->id }}_{{ $department->id }}" name="is_active" @disabled($department->trashed())>
                                                         <option value="1" @selected($department->is_active)>Si</option>
                                                         <option value="0" @selected(! $department->is_active)>No</option>
                                                     </select>
                                                 </div>
 
                                                 <div class="department-move">
-                                                    <button type="submit" class="btn-small" title="Sposta su" name="direction" value="up" formaction="{{ route('monitoraggi.departments.move', [$section, $department]) }}">↑</button>
-                                                    <button type="submit" class="btn-small" title="Sposta giu" name="direction" value="down" formaction="{{ route('monitoraggi.departments.move', [$section, $department]) }}">↓</button>
-                                                </div>
-
-                                                <div class="department-move">
-                                                    @if ($department->is_active)
-                                                        <button type="submit" class="btn-small soft-btn" name="quick_action" value="hide">Oscura</button>
+                                                    @if ($department->trashed())
+                                                        <span class="badge soft">Eliminato</span>
+                                                        <button type="submit" class="btn-small" formaction="{{ route('monitoraggi.departments.restore', [$section, $department]) }}">Ripristina</button>
                                                     @else
-                                                        <button type="submit" class="btn-small soft-btn" name="quick_action" value="show">Riattiva</button>
+                                                        <button type="submit" class="btn-small" title="Sposta su" name="direction" value="up" formaction="{{ route('monitoraggi.departments.move', [$section, $department]) }}">↑</button>
+                                                        <button type="submit" class="btn-small" title="Sposta giu" name="direction" value="down" formaction="{{ route('monitoraggi.departments.move', [$section, $department]) }}">↓</button>
+                                                        @if ($department->is_active)
+                                                            <button type="submit" class="btn-small soft-btn" name="quick_action" value="hide">Oscura per operatori</button>
+                                                        @else
+                                                            <button type="submit" class="btn-small soft-btn" name="quick_action" value="show">Riattiva</button>
+                                                        @endif
+                                                        <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" data-admin-confirm data-confirm-title="Eliminare il reparto?" data-confirm-text="Il reparto sara rimosso dai dati operativi e potra essere recuperato solo dal pulsante Ripristina.">Elimina (ripristinabile)</button>
                                                     @endif
-                                                    <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" onclick="return confirm('Confermi eliminazione reparto? I punti collegati andranno in Senza reparto.');">Elimina</button>
                                                 </div>
 
-                                                <button type="submit" class="btn-small">Salva reparto</button>
+                                                @if (! $department->trashed())
+                                                    <button type="submit" class="btn-small">Salva reparto</button>
+                                                @endif
                                             </form>
                                         @empty
                                             <div class="department-row">
@@ -1533,7 +1538,7 @@
                                                     @else
                                                         <button type="submit" class="btn-small soft-btn" name="quick_action" value="show">Riattiva</button>
                                                     @endif
-                                                    <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" onclick="return confirm('Confermi eliminazione punto? Se e presente nello storico verra solo oscurato.');">Elimina</button>
+                                                    <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" data-admin-confirm data-confirm-title="Eliminare il punto?" data-confirm-text="Se e presente nello storico verra solo oscurato.">Elimina</button>
                                                 </div>
 
                                                 <button type="submit" class="btn-small">Salva punto</button>
@@ -2201,6 +2206,30 @@
             if (timeInput.matches('input[type="time"]') && timeInput.value === '') {
                 timeInput.value = serverTime;
             }
+        });
+
+        document.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-admin-confirm]');
+
+            if (!button || !button.form) {
+                return;
+            }
+
+            event.preventDefault();
+
+            Swal.fire({
+                title: button.dataset.confirmTitle,
+                text: button.dataset.confirmText,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Elimina',
+                cancelButtonText: 'Annulla',
+                confirmButtonColor: '#b83232',
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    button.form.requestSubmit(button);
+                }
+            });
         });
 
         document.querySelectorAll('[data-department-select]').forEach(function (departmentSelect) {

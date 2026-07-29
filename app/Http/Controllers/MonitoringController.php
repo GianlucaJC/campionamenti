@@ -71,10 +71,15 @@ class MonitoringController extends Controller
 
         $includeInactivePoints = $request->user()?->isAdmin() && $currentView === 'gestione-punti';
         $includeInactiveSections = $request->user()?->isAdmin() && $currentView === 'gestione-reparti';
+        $includeDeletedDepartments = $request->user()?->isAdmin() && $currentView === 'gestione-reparti';
 
         $sections = MonitoringSection::query()
             ->when(! $includeInactiveSections, fn ($query) => $query->where('is_active', true))
-            ->with(['departments' => function ($query) {
+            ->with(['departments' => function ($query) use ($includeDeletedDepartments) {
+                if ($includeDeletedDepartments) {
+                    $query->withTrashed();
+                }
+
                 $query->orderBy('sort_order')->orderBy('name');
             }])
             ->with(['samplingPoints' => function ($query) use ($includeInactivePoints) {
@@ -1338,6 +1343,28 @@ class MonitoringController extends Controller
                 'env' => $section->environment ?: 'produzione',
             ])
             ->with('status', "Reparto aggiornato in '{$section->name}'.");
+    }
+
+    /**
+     * Restore a soft-deleted department and make it available again.
+     */
+    public function restoreDepartment(
+        MonitoringSection $section,
+        MonitoringDepartment $department
+    ): RedirectResponse {
+        if ((int) $department->monitoring_section_id !== (int) $section->id || ! $department->trashed()) {
+            abort(404, 'Reparto non disponibile per il ripristino.');
+        }
+
+        $department->restore();
+        $department->update(['is_active' => true]);
+
+        return redirect()
+            ->route('monitoraggi.index', [
+                'view' => 'gestione-reparti',
+                'env' => $section->environment ?: 'produzione',
+            ])
+            ->with('status', "Reparto '{$department->name}' ripristinato in '{$section->name}'.");
     }
 
     /**

@@ -56,6 +56,9 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
         ->name('monitoraggi.departments.store');
     Route::patch('/monitoraggi/{section}/departments/{department}', [MonitoringController::class, 'updateDepartment'])
         ->name('monitoraggi.departments.update');
+    Route::patch('/monitoraggi/{section}/departments/{department}/restore', [MonitoringController::class, 'restoreDepartment'])
+        ->withTrashed()
+        ->name('monitoraggi.departments.restore');
     Route::patch('/monitoraggi/{section}/departments/{department}/move', [MonitoringController::class, 'moveDepartment'])
         ->name('monitoraggi.departments.move');
 });
