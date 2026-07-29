@@ -24,6 +24,7 @@ class SamplingPoint extends Model
         'area_label',
         'sample_kind',
         'default_volume_liters',
+        'default_exposure_hours',
         'requires_operational_status',
         'requires_product_lot',
         'sort_order',

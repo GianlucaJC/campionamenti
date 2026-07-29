@@ -499,6 +499,10 @@
             gap: 4px;
         }
 
+        .field[hidden] {
+            display: none !important;
+        }
+
         .field label {
             font-size: 0.8rem;
             color: var(--muted);
@@ -1326,7 +1330,7 @@
                                             </div>
                                             <div class="field">
                                                 <label for="new_kind_{{ $section->id }}">Tipo campionamento</label>
-                                                <select id="new_kind_{{ $section->id }}" name="sample_kind">
+                                                <select id="new_kind_{{ $section->id }}" name="sample_kind" data-sample-kind-select>
                                                     <option value="air_passive">Aria passiva</option>
                                                     <option value="air_active">Aria attiva</option>
                                                     <option value="surface_contact">Superficie contact plate</option>
@@ -1334,9 +1338,17 @@
                                                     <option value="water">Acqua</option>
                                                 </select>
                                             </div>
-                                            <div class="field">
+                                            <div class="field" data-sample-setting="volume">
                                                 <label for="new_volume_{{ $section->id }}">Volume standard (L)</label>
                                                 <input id="new_volume_{{ $section->id }}" type="number" min="0" name="default_volume_liters" placeholder="1000">
+                                            </div>
+                                            <div class="field" data-sample-setting="exposure">
+                                                <label for="new_exposure_{{ $section->id }}">Tempo di esposizione</label>
+                                                <select id="new_exposure_{{ $section->id }}" name="default_exposure_hours">
+                                                    <option value="">Seleziona</option>
+                                                    <option value="3">3 ore</option>
+                                                    <option value="4">4 ore</option>
+                                                </select>
                                             </div>
                                             <div class="field">
                                                 <label for="new_op_{{ $section->id }}">Richiede stato operativo</label>
@@ -1411,7 +1423,7 @@
 
                                                 <div class="field">
                                                     <label for="point_kind_{{ $section->id }}_{{ $point->id }}">Tipo</label>
-                                                    <select id="point_kind_{{ $section->id }}_{{ $point->id }}" name="sample_kind">
+                                                    <select id="point_kind_{{ $section->id }}_{{ $point->id }}" name="sample_kind" data-sample-kind-select>
                                                         <option value="air_passive" @selected($point->sample_kind === 'air_passive')>Aria passiva</option>
                                                         <option value="air_active" @selected($point->sample_kind === 'air_active')>Aria attiva</option>
                                                         <option value="surface_contact" @selected($point->sample_kind === 'surface_contact')>Superficie contact plate</option>
@@ -1420,9 +1432,17 @@
                                                     </select>
                                                 </div>
 
-                                                <div class="field">
+                                                <div class="field" data-sample-setting="volume">
                                                     <label for="point_volume_{{ $section->id }}_{{ $point->id }}">Volume (L)</label>
                                                     <input id="point_volume_{{ $section->id }}_{{ $point->id }}" type="number" min="0" name="default_volume_liters" value="{{ $point->default_volume_liters }}">
+                                                </div>
+                                                <div class="field" data-sample-setting="exposure">
+                                                    <label for="point_exposure_{{ $section->id }}_{{ $point->id }}">Tempo di esposizione</label>
+                                                    <select id="point_exposure_{{ $section->id }}_{{ $point->id }}" name="default_exposure_hours">
+                                                        <option value="">Seleziona</option>
+                                                        <option value="3" @selected((int) $point->default_exposure_hours === 3)>3 ore</option>
+                                                        <option value="4" @selected((int) $point->default_exposure_hours === 4)>4 ore</option>
+                                                    </select>
                                                 </div>
 
                                                 <div class="field">
@@ -1908,7 +1928,7 @@
                                                 <th>Ora</th>
                                                 <th>Operativo</th>
                                                 <th>Lotto prodotto</th>
-                                                <th>Volume (L)</th>
+                                                <th>Parametro campionamento</th>
                                                 <th>CFU</th>
                                                 <th>Note</th>
                                             </tr>
@@ -2045,7 +2065,15 @@
                                                                 -
                                                             @endif
                                                         </td>
-                                                        <td>{{ $point->default_volume_liters ?? '-' }}</td>
+                                                        <td>
+                                                            @if ($point->sample_kind === 'air_passive')
+                                                                {{ $point->default_exposure_hours ? $point->default_exposure_hours . ' h' : '-' }}
+                                                            @elseif ($point->sample_kind === 'air_active')
+                                                                {{ $point->default_volume_liters ? $point->default_volume_liters . ' L' : '-' }}
+                                                            @else
+                                                                -
+                                                            @endif
+                                                        </td>
                                                         <td>
                                                             <input type="number" min="0" name="points[{{ $point->id }}][cfu_count]" value="{{ old("points.{$point->id}.cfu_count", data_get($editingPointResults->get($point->id), 'cfu_count')) }}">
                                                         </td>
@@ -2151,6 +2179,37 @@
 
             departmentSelect.addEventListener('change', syncAnchorOptions);
             syncAnchorOptions();
+        });
+
+        document.querySelectorAll('[data-sample-kind-select]').forEach(function (sampleKindSelect) {
+            var form = sampleKindSelect.closest('form');
+            var volumeField = form ? form.querySelector('[data-sample-setting="volume"]') : null;
+            var exposureField = form ? form.querySelector('[data-sample-setting="exposure"]') : null;
+
+            var syncSampleSettings = function () {
+                var showVolume = sampleKindSelect.value === 'air_active';
+                var showExposure = sampleKindSelect.value === 'air_passive';
+
+                [
+                    [volumeField, showVolume],
+                    [exposureField, showExposure],
+                ].forEach(function (setting) {
+                    var field = setting[0];
+                    var isVisible = setting[1];
+
+                    if (!field) {
+                        return;
+                    }
+
+                    field.hidden = !isVisible;
+                    field.querySelectorAll('input, select').forEach(function (input) {
+                        input.disabled = !isVisible;
+                    });
+                });
+            };
+
+            sampleKindSelect.addEventListener('change', syncSampleSettings);
+            syncSampleSettings();
         });
 
         document.querySelectorAll('[data-production-operational]').forEach(function (operationalSelect) {

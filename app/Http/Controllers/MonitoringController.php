@@ -957,6 +957,7 @@ class MonitoringController extends Controller
             'area_label' => ['nullable', 'string', 'max:255'],
             'sample_kind' => ['required', 'string', 'max:50'],
             'default_volume_liters' => ['nullable', 'integer', 'min:0'],
+            'default_exposure_hours' => ['nullable', 'integer', 'in:3,4'],
             'requires_operational_status' => ['required', 'boolean'],
             'requires_product_lot' => ['required', 'boolean'],
             'anchor_point_id' => ['nullable', 'integer'],
@@ -990,7 +991,12 @@ class MonitoringController extends Controller
             'title' => $data['title'],
             'area_label' => $data['area_label'] ?: null,
             'sample_kind' => $data['sample_kind'],
-            'default_volume_liters' => $data['default_volume_liters'] ?? null,
+            'default_volume_liters' => $data['sample_kind'] === 'air_active'
+                ? ($data['default_volume_liters'] ?? null)
+                : null,
+            'default_exposure_hours' => $data['sample_kind'] === 'air_passive'
+                ? ($data['default_exposure_hours'] ?? null)
+                : null,
             'requires_operational_status' => (bool) $data['requires_operational_status'],
             'requires_product_lot' => (bool) $data['requires_product_lot'],
             'sort_order' => $sortOrder,
@@ -1070,6 +1076,7 @@ class MonitoringController extends Controller
             'area_label' => ['nullable', 'string', 'max:255'],
             'sample_kind' => ['required', 'string', 'max:50'],
             'default_volume_liters' => ['nullable', 'integer', 'min:0'],
+            'default_exposure_hours' => ['nullable', 'integer', 'in:3,4'],
             'requires_operational_status' => ['required', 'boolean'],
             'requires_product_lot' => ['required', 'boolean'],
             'is_active' => ['required', 'boolean'],
@@ -1091,7 +1098,12 @@ class MonitoringController extends Controller
             'title' => $data['title'],
             'area_label' => $data['area_label'] ?: null,
             'sample_kind' => $data['sample_kind'],
-            'default_volume_liters' => $data['default_volume_liters'] ?? null,
+            'default_volume_liters' => $data['sample_kind'] === 'air_active'
+                ? ($data['default_volume_liters'] ?? null)
+                : null,
+            'default_exposure_hours' => $data['sample_kind'] === 'air_passive'
+                ? ($data['default_exposure_hours'] ?? null)
+                : null,
             'requires_operational_status' => (bool) $data['requires_operational_status'],
             'requires_product_lot' => (bool) $data['requires_product_lot'],
             'is_active' => (bool) $data['is_active'],
