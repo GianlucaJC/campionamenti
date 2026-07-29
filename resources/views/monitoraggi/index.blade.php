@@ -1051,11 +1051,15 @@
                                     @endif
 
                                     <div class="actions" style="margin-top:8px;">
-                                        @if (auth()->user()?->isOperatore() && ! $check->trashed() && ! $hasCheckSignature)
+                                        @if (auth()->user()?->isOperatore() && ! $check->trashed())
                                             <form action="{{ route('monitoraggi.checks.delete', $check) }}" method="POST">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn-small danger-btn" onclick="return confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.');">Elimina</button>
+                                                @if ($hasCheckSignature)
+                                                    <label class="hint" for="delete_reason_{{ $check->id }}">Motivazione eliminazione</label>
+                                                    <input id="delete_reason_{{ $check->id }}" type="text" name="deletion_reason" maxlength="1000" required placeholder="Motivazione obbligatoria">
+                                                @endif
+                                                <button type="submit" class="btn-small danger-btn" onclick="return confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.');">{{ $hasCheckSignature ? 'Elimina con motivazione' : 'Elimina' }}</button>
                                             </form>
                                         @endif
                                         @if (auth()->user()?->isAdmin() && $check->trashed())
@@ -1135,7 +1139,7 @@
                                             <div style="display: grid; gap: 6px; margin-top: 8px;">
                                                 @foreach ($check->phaseLogs as $phaseLog)
                                                     <span class="hint">
-                                                        {{ $phaseLog->phase === 'archive' ? 'Archivio' : ($productionPhases[$phaseLog->phase] ?? $phaseLog->phase) }}: {{ $phaseLog->action === 'saved_and_signed' ? 'salvata e firmata' : ($phaseLog->action === 'reopened' ? 'riaperta' : ($phaseLog->action === 'soft_deleted' ? 'eliminata' : ($phaseLog->action === 'restored' ? 'ripristinata' : 'salvata'))) }} da {{ $phaseLog->performedBy?->name ?: ('Utente #' . $phaseLog->performed_by_user_id) }} il {{ $phaseLog->logged_at?->format('d-m-Y H:i') ?: '-' }}@if ($phaseLog->action === 'reopened' && $phaseLog->reason) - Motivazione: {{ $phaseLog->reason }}@endif
+                                                        {{ $phaseLog->phase === 'archive' ? 'Archivio' : ($productionPhases[$phaseLog->phase] ?? $phaseLog->phase) }}: {{ $phaseLog->action === 'saved_and_signed' ? 'salvata e firmata' : ($phaseLog->action === 'reopened' ? 'riaperta' : ($phaseLog->action === 'soft_deleted' ? 'eliminata' : ($phaseLog->action === 'restored' ? 'ripristinata' : 'salvata'))) }} da {{ $phaseLog->performedBy?->name ?: ('Utente #' . $phaseLog->performed_by_user_id) }} il {{ $phaseLog->logged_at?->format('d-m-Y H:i') ?: '-' }}@if (in_array($phaseLog->action, ['reopened', 'soft_deleted'], true) && $phaseLog->reason) - Motivazione: {{ $phaseLog->reason }}@endif
                                                     </span>
                                                 @endforeach
                                             </div>

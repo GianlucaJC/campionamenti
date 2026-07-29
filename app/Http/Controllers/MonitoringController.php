@@ -432,19 +432,21 @@ class MonitoringController extends Controller
     }
 
     /**
-     * Soft-delete an unsigned check and retain an audit trail.
+     * Soft-delete a check and require a justification when it has signatures.
      */
     public function deleteCheck(Request $request, MicrobiologicalCheck $check): RedirectResponse
     {
-        if ($this->checkHasSignature($check)) {
-            return $this->redirectToArchive($check)
-                ->withErrors(['check' => 'Non puoi eliminare un campionamento che contiene almeno una firma.']);
-        }
+        $hasSignature = $this->checkHasSignature($check);
+        $data = $request->validate([
+            'deletion_reason' => [$hasSignature ? 'required' : 'nullable', 'string', 'max:1000'],
+        ]);
+        $reason = filled($data['deletion_reason'] ?? null) ? trim($data['deletion_reason']) : null;
 
-        DB::transaction(function () use ($check, $request): void {
+        DB::transaction(function () use ($check, $request, $reason): void {
             $check->phaseLogs()->create([
                 'phase' => 'archive',
                 'action' => 'soft_deleted',
+                'reason' => $reason,
                 'performed_by_user_id' => $request->user()->id,
                 'logged_at' => now(),
             ]);
