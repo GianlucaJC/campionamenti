@@ -35,10 +35,15 @@ Route::middleware(['auth', 'role:operatore'])->group(function () {
         ->name('monitoraggi.checks.store');
     Route::patch('/monitoraggi/{section}/checks/{check}', [MonitoringController::class, 'updateCheck'])
         ->name('monitoraggi.checks.update');
+    Route::delete('/monitoraggi/checks/{check}', [MonitoringController::class, 'deleteCheck'])
+        ->name('monitoraggi.checks.delete');
 });
 
 // Accessibile solo da admin (gestione struttura)
 Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::patch('/monitoraggi/checks/{check}/restore', [MonitoringController::class, 'restoreCheck'])
+        ->withTrashed()
+        ->name('monitoraggi.checks.restore');
     Route::patch('/monitoraggi/{section}/visibility', [MonitoringController::class, 'updateSectionVisibility'])
         ->name('monitoraggi.sections.visibility');
     Route::post('/monitoraggi/{section}/points', [MonitoringController::class, 'storePoint'])

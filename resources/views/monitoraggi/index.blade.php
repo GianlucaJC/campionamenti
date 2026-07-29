@@ -972,6 +972,15 @@
                                 <option value="100" @selected((int) $archivePerPage === 100)>100</option>
                             </select>
                         </div>
+                        @if (auth()->user()?->isAdmin())
+                            <div class="field">
+                                <label for="archive_status">Stato</label>
+                                <select id="archive_status" name="archive_status">
+                                    <option value="active" @selected($archiveStatus === 'active')>Attivi</option>
+                                    <option value="deleted" @selected($archiveStatus === 'deleted')>Eliminati</option>
+                                </select>
+                            </div>
+                        @endif
                         <div class="field">
                             <button type="submit">Cerca</button>
                         </div>
@@ -1003,11 +1012,31 @@
 
                             @foreach ($checksOnDate as $check)
                                 <div class="archive-item" style="margin-top:8px;">
+                                    @php
+                                        $hasCheckSignature = $check->phaseStates->contains(fn ($state) => filled($state->signed_at))
+                                            || collect([
+                                                $check->sampling_completed_signature,
+                                                $check->first_reading_completed_signature,
+                                                $check->second_reading_completed_signature,
+                                                $check->incubation_started_signature,
+                                                $check->incubation_finished_signature,
+                                                $check->sampling_completed_by_user_id,
+                                                $check->first_reading_completed_by_user_id,
+                                                $check->second_reading_completed_by_user_id,
+                                            ])->contains(fn ($value) => filled($value));
+                                    @endphp
                                     <strong>
-                                        <a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}" style="color: inherit; text-decoration: none;">
+                                        @if (! $check->trashed())
+                                            <a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}" style="color: inherit; text-decoration: none;">
+                                                {{ $check->section?->name ?? 'Sezione rimossa' }}
+                                            </a>
+                                        @else
                                             {{ $check->section?->name ?? 'Sezione rimossa' }}
-                                        </a>
+                                        @endif
                                     </strong>
+                                    @if ($check->trashed())
+                                        <span class="badge soft">Eliminato</span>
+                                    @endif
                                     @if ($currentEnvironment === 'acque')
                                         <span class="badge soft">Acque</span>
                                     @endif
@@ -1017,7 +1046,27 @@
                                         <span class="hint">Ora prelievo: {{ substr((string) $check->sampled_time, 0, 5) }}</span>
                                     @endif
                                     <span class="hint">Salvato il: {{ optional($check->created_at)->format('d-m-Y H:i') ?: '-' }}</span>
-                                    <span class="hint"><a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}">Apri in modifica</a></span>
+                                    @if (! $check->trashed())
+                                        <span class="hint"><a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}">Apri in modifica</a></span>
+                                    @endif
+
+                                    <div class="actions" style="margin-top:8px;">
+                                        @if (auth()->user()?->isOperatore() && ! $check->trashed() && ! $hasCheckSignature)
+                                            <form action="{{ route('monitoraggi.checks.delete', $check) }}" method="POST">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn-small danger-btn" onclick="return confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.');">Elimina</button>
+                                            </form>
+                                        @endif
+                                        @if (auth()->user()?->isAdmin() && $check->trashed())
+                                            <form action="{{ route('monitoraggi.checks.restore', $check) }}" method="POST">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="btn-small">Ripristina</button>
+                                            </form>
+                                            <span class="hint">Eliminato da {{ $check->deletedBy?->name ?: '-' }} il {{ $check->deleted_at?->format('d-m-Y H:i') ?: '-' }}</span>
+                                        @endif
+                                    </div>
 
                                     @if ($currentEnvironment === 'acque')
                                         <div class="archive-water-meta">
@@ -1086,7 +1135,7 @@
                                             <div style="display: grid; gap: 6px; margin-top: 8px;">
                                                 @foreach ($check->phaseLogs as $phaseLog)
                                                     <span class="hint">
-                                                        {{ $productionPhases[$phaseLog->phase] ?? $phaseLog->phase }}: {{ $phaseLog->action === 'saved_and_signed' ? 'salvata e firmata' : ($phaseLog->action === 'reopened' ? 'riaperta' : 'salvata') }} da {{ $phaseLog->performedBy?->name ?: ('Utente #' . $phaseLog->performed_by_user_id) }} il {{ $phaseLog->logged_at?->format('d-m-Y H:i') ?: '-' }}@if ($phaseLog->action === 'reopened' && $phaseLog->reason) - Motivazione: {{ $phaseLog->reason }}@endif
+                                                        {{ $phaseLog->phase === 'archive' ? 'Archivio' : ($productionPhases[$phaseLog->phase] ?? $phaseLog->phase) }}: {{ $phaseLog->action === 'saved_and_signed' ? 'salvata e firmata' : ($phaseLog->action === 'reopened' ? 'riaperta' : ($phaseLog->action === 'soft_deleted' ? 'eliminata' : ($phaseLog->action === 'restored' ? 'ripristinata' : 'salvata'))) }} da {{ $phaseLog->performedBy?->name ?: ('Utente #' . $phaseLog->performed_by_user_id) }} il {{ $phaseLog->logged_at?->format('d-m-Y H:i') ?: '-' }}@if ($phaseLog->action === 'reopened' && $phaseLog->reason) - Motivazione: {{ $phaseLog->reason }}@endif
                                                     </span>
                                                 @endforeach
                                             </div>

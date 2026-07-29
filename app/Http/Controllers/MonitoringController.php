@@ -144,6 +144,9 @@ class MonitoringController extends Controller
         $archiveFrom = $request->query('archive_from');
         $archiveTo = $request->query('archive_to');
         $archivePerPage = (int) $request->query('archive_per_page', 20);
+        $archiveStatus = $request->user()?->isAdmin() && $request->query('archive_status') === 'deleted'
+            ? 'deleted'
+            : 'active';
 
         if (! in_array($archivePerPage, [10, 20, 50, 100], true)) {
             $archivePerPage = 20;
@@ -153,7 +156,7 @@ class MonitoringController extends Controller
         $editingCheck = null;
         if ($currentView === 'archivio') {
             $archiveQuery = MicrobiologicalCheck::query()
-                ->with(['section:id,name,environment,sub_environment', 'author:id,name'])
+                ->with(['section:id,name,environment,sub_environment', 'author:id,name', 'phaseStates'])
                 ->withCount('pointResults')
                 ->whereHas('section', function ($query) use ($currentEnvironment, $currentSubEnvironment, $availableSubEnvironments): void {
                     $query
@@ -176,7 +179,15 @@ class MonitoringController extends Controller
                 ->orderByDesc('id');
 
             if ($request->user()?->isAdmin()) {
-                $archiveQuery->with(['phaseLogs.performedBy:id,name']);
+                $archiveQuery
+                    ->withTrashed()
+                    ->with(['phaseLogs.performedBy:id,name', 'deletedBy:id,name']);
+
+                if ($archiveStatus === 'deleted') {
+                    $archiveQuery->onlyTrashed();
+                } else {
+                    $archiveQuery->withoutTrashed();
+                }
             }
 
             if ($currentEnvironment === 'acque') {
@@ -268,6 +279,7 @@ class MonitoringController extends Controller
             'archiveFrom' => $archiveFrom,
             'archiveTo' => $archiveTo,
             'archivePerPage' => $archivePerPage,
+            'archiveStatus' => $archiveStatus,
             'editingCheck' => $editingCheck,
             'trendByEnvironment' => $trendByEnvironment,
             'trendBySection' => $trendBySection,
@@ -420,6 +432,57 @@ class MonitoringController extends Controller
     }
 
     /**
+     * Soft-delete an unsigned check and retain an audit trail.
+     */
+    public function deleteCheck(Request $request, MicrobiologicalCheck $check): RedirectResponse
+    {
+        if ($this->checkHasSignature($check)) {
+            return $this->redirectToArchive($check)
+                ->withErrors(['check' => 'Non puoi eliminare un campionamento che contiene almeno una firma.']);
+        }
+
+        DB::transaction(function () use ($check, $request): void {
+            $check->phaseLogs()->create([
+                'phase' => 'archive',
+                'action' => 'soft_deleted',
+                'performed_by_user_id' => $request->user()->id,
+                'logged_at' => now(),
+            ]);
+
+            $check->update(['deleted_by_user_id' => $request->user()->id]);
+            $check->delete();
+        });
+
+        return $this->redirectToArchive($check)
+            ->with('status', 'Campionamento eliminato. Un admin puo ripristinarlo dall\'archivio eliminati.');
+    }
+
+    /**
+     * Restore a soft-deleted check and record the administrative action.
+     */
+    public function restoreCheck(Request $request, MicrobiologicalCheck $check): RedirectResponse
+    {
+        if (! $check->trashed()) {
+            return $this->redirectToArchive($check)
+                ->withErrors(['check' => 'Il campionamento selezionato non e eliminato.']);
+        }
+
+        DB::transaction(function () use ($check, $request): void {
+            $check->restore();
+            $check->update(['deleted_by_user_id' => null]);
+            $check->phaseLogs()->create([
+                'phase' => 'archive',
+                'action' => 'restored',
+                'performed_by_user_id' => $request->user()->id,
+                'logged_at' => now(),
+            ]);
+        });
+
+        return $this->redirectToArchive($check)
+            ->with('status', 'Campionamento ripristinato correttamente.');
+    }
+
+    /**
      * Build validation rules for a check payload.
      */
     private function buildCheckRules($pointCollection): array
@@ -527,6 +590,35 @@ class MonitoringController extends Controller
     private function isPhasedEnvironment(MonitoringSection $section): bool
     {
         return in_array($section->environment ?: 'produzione', ['produzione', 'clean_room', 'operatori'], true);
+    }
+
+    private function checkHasSignature(MicrobiologicalCheck $check): bool
+    {
+        if ($check->phaseStates()->whereNotNull('signed_at')->exists()) {
+            return true;
+        }
+
+        return collect([
+            $check->sampling_completed_signature,
+            $check->first_reading_completed_signature,
+            $check->second_reading_completed_signature,
+            $check->incubation_started_signature,
+            $check->incubation_finished_signature,
+            $check->sampling_completed_by_user_id,
+            $check->first_reading_completed_by_user_id,
+            $check->second_reading_completed_by_user_id,
+        ])->contains(fn ($value) => filled($value));
+    }
+
+    private function redirectToArchive(MicrobiologicalCheck $check): RedirectResponse
+    {
+        $section = $check->section;
+
+        return redirect()->route('monitoraggi.index', array_filter([
+            'view' => 'archivio',
+            'env' => $section?->environment ?: 'produzione',
+            'sub' => $section?->sub_environment ?: null,
+        ]));
     }
 
     /**
