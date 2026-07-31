@@ -44,6 +44,12 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::patch('/monitoraggi/checks/{check}/restore', [MonitoringController::class, 'restoreCheck'])
         ->withTrashed()
         ->name('monitoraggi.checks.restore');
+    Route::post('/monitoraggi/sections', [MonitoringController::class, 'storeSection'])
+        ->name('monitoraggi.sections.store');
+    Route::patch('/monitoraggi/sections/{section}', [MonitoringController::class, 'updateSection'])
+        ->name('monitoraggi.sections.update');
+    Route::patch('/monitoraggi/sections/{section}/move', [MonitoringController::class, 'moveSection'])
+        ->name('monitoraggi.sections.move');
     Route::patch('/monitoraggi/{section}/visibility', [MonitoringController::class, 'updateSectionVisibility'])
         ->name('monitoraggi.sections.visibility');
     Route::post('/monitoraggi/{section}/points', [MonitoringController::class, 'storePoint'])

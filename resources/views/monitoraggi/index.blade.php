@@ -1343,6 +1343,75 @@
             </article>
         @endif
 
+        @if ($currentView === 'gestione-sezioni' && auth()->user()?->isAdmin())
+            <details class="section" open>
+                <summary>
+                    <div>
+                        <p class="section-title">Gestione sezioni</p>
+                        <p class="section-desc">Configura le sezioni nell'ambiente {{ $environmentLabels[$currentEnvironment] ?? $currentEnvironment }} e definiscine l'ordine di visualizzazione.</p>
+                    </div>
+                    <span class="badge soft">Admin</span>
+                </summary>
+
+                <div class="section-body">
+                    <form action="{{ route('monitoraggi.sections.store') }}" method="POST">
+                        @csrf
+                        <input type="hidden" name="environment" value="{{ $currentEnvironment }}">
+                        @if ($currentSubEnvironment)
+                            <input type="hidden" name="sub_environment" value="{{ $currentSubEnvironment }}">
+                        @endif
+                        <div class="department-grid">
+                            <div class="field">
+                                <label for="new_section_name">Nome sezione</label>
+                                <input id="new_section_name" type="text" name="name" maxlength="255" required placeholder="es. Reparto piastre">
+                            </div>
+                            <div class="field">
+                                <label for="new_section_code">Codice sezione (opzionale)</label>
+                                <input id="new_section_code" type="text" name="code" maxlength="255" placeholder="es. reparto-piastre">
+                            </div>
+                        </div>
+                        <div class="actions" style="margin-top:10px;">
+                            <p class="hint">Le nuove sezioni vengono aggiunte in fondo all'elenco.</p>
+                            <button type="submit">Aggiungi sezione</button>
+                        </div>
+                    </form>
+
+                    <div class="department-table">
+                        @forelse ($filteredSections as $section)
+                            <form class="department-row" action="{{ route('monitoraggi.sections.update', $section) }}" method="POST">
+                                @csrf
+                                @method('PATCH')
+
+                                <div class="field">
+                                    <label for="section_name_{{ $section->id }}">Nome sezione</label>
+                                    <input id="section_name_{{ $section->id }}" type="text" name="name" maxlength="255" value="{{ $section->name }}" required>
+                                </div>
+
+                                <div class="field">
+                                    <label for="section_code_{{ $section->id }}">Codice</label>
+                                    <input id="section_code_{{ $section->id }}" type="text" name="code" maxlength="255" value="{{ $section->code }}">
+                                </div>
+
+                                <div class="department-move">
+                                    <button type="submit" class="btn-small" title="Sposta su" name="direction" value="up" formaction="{{ route('monitoraggi.sections.move', $section) }}">↑</button>
+                                    <button type="submit" class="btn-small" title="Sposta giu" name="direction" value="down" formaction="{{ route('monitoraggi.sections.move', $section) }}">↓</button>
+                                    @if (! $section->is_active)
+                                        <span class="badge soft">Oscurata</span>
+                                    @endif
+                                </div>
+
+                                <button type="submit" class="btn-small">Salva sezione</button>
+                            </form>
+                        @empty
+                            <div class="department-row">
+                                <p class="hint" style="grid-column: 1 / -1; margin: 0;">Nessuna sezione configurata per questo ambiente.</p>
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
+            </details>
+        @endif
+
         @if ($currentView === 'gestione-reparti' && auth()->user()?->isAdmin())
                 <details class="section" open>
                     <summary>
@@ -1464,7 +1533,22 @@
         @if ($currentView === 'nuovo' || $currentView === 'gestione-punti')
             @forelse ($filteredSections as $section)
                 @php
-                    $groupedPoints = $section->samplingPoints->groupBy(fn ($point) => $point->department?->name ?: 'Senza reparto');
+                    $groupedPoints = collect();
+                    foreach ($section->departments as $department) {
+                        $departmentPoints = $section->samplingPoints
+                            ->where('monitoring_department_id', $department->id);
+
+                        if ($departmentPoints->isNotEmpty()) {
+                            $groupedPoints->put($department->name, $departmentPoints);
+                        }
+                    }
+
+                    $unassignedPoints = $section->samplingPoints
+                        ->filter(fn ($point) => ! $section->departments->contains('id', $point->monitoring_department_id));
+
+                    if ($unassignedPoints->isNotEmpty()) {
+                        $groupedPoints->put('Senza reparto', $unassignedPoints);
+                    }
                     $sectionMaximumReadings = max(1, (int) $section->departments->max('readings_count'));
                     $sectionProductionPhases = ['sampling' => 'Fase campionamento'];
                     foreach (range(1, $sectionMaximumReadings) as $readingNumber) {

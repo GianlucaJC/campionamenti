@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -33,6 +34,7 @@ class MonitoringController extends Controller
 
         if ($request->user()?->isAdmin()) {
             $adminMenuItems = [
+                ['key' => 'gestione-sezioni', 'label' => 'Gestione sezioni'],
                 ['key' => 'gestione-reparti', 'label' => 'Gestione reparti'],
                 ['key' => 'gestione-punti', 'label' => 'Gestione punti campionamento'],
                 ['key' => 'trend', 'label' => 'Trend'],
@@ -70,7 +72,7 @@ class MonitoringController extends Controller
         ];
 
         $includeInactivePoints = $request->user()?->isAdmin() && $currentView === 'gestione-punti';
-        $includeInactiveSections = $request->user()?->isAdmin() && $currentView === 'gestione-reparti';
+        $includeInactiveSections = $request->user()?->isAdmin() && in_array($currentView, ['gestione-sezioni', 'gestione-reparti'], true);
         $includeDeletedDepartments = $request->user()?->isAdmin() && $currentView === 'gestione-reparti';
 
         $sections = MonitoringSection::query()
@@ -1468,6 +1470,160 @@ class MonitoringController extends Controller
                 'env' => $section->environment ?: 'produzione',
             ])
             ->with('status', "Reparto '{$department->name}' ripristinato in '{$section->name}'.");
+    }
+
+    /**
+     * Create a monitoring section in the selected environment.
+     */
+    public function storeSection(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'environment' => ['required', 'in:produzione,clean_room,acque,operatori'],
+            'sub_environment' => ['nullable', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:255'],
+            'code' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $name = trim($data['name']);
+        $environment = $data['environment'];
+        $subEnvironment = filled($data['sub_environment'] ?? null) ? trim($data['sub_environment']) : null;
+        $sections = MonitoringSection::query()
+            ->where('environment', $environment)
+            ->when($subEnvironment, fn ($query) => $query->where('sub_environment', $subEnvironment), fn ($query) => $query->whereNull('sub_environment'));
+
+        if ((clone $sections)->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->exists()) {
+            return redirect()
+                ->route('monitoraggi.index', array_filter([
+                    'view' => 'gestione-sezioni',
+                    'env' => $environment,
+                    'sub' => $subEnvironment,
+                ]))
+                ->withErrors(['name' => 'Esiste gia una sezione con questo nome nell\'ambiente selezionato.']);
+        }
+
+        $baseCode = Str::slug(filled($data['code'] ?? null) ? $data['code'] : $name) ?: 'sezione';
+        $code = $baseCode;
+        $suffix = 2;
+
+        while (MonitoringSection::query()->where('code', $code)->exists()) {
+            $code = "{$baseCode}-{$suffix}";
+            $suffix++;
+        }
+
+        MonitoringSection::query()->create([
+            'code' => $code,
+            'environment' => $environment,
+            'sub_environment' => $subEnvironment,
+            'name' => $name,
+            'sort_order' => ((float) ((clone $sections)->max('sort_order') ?? 0)) + 10,
+            'is_active' => true,
+        ]);
+
+        return redirect()
+            ->route('monitoraggi.index', array_filter([
+                'view' => 'gestione-sezioni',
+                'env' => $environment,
+                'sub' => $subEnvironment,
+            ]))
+            ->with('status', "Nuova sezione '{$name}' aggiunta.");
+    }
+
+    /**
+     * Rename a monitoring section and optionally update its code.
+     */
+    public function updateSection(Request $request, MonitoringSection $section): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'code' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $name = trim($data['name']);
+        $matchingSections = MonitoringSection::query()
+            ->where('environment', $section->environment)
+            ->where('id', '!=', $section->id)
+            ->when($section->sub_environment, fn ($query) => $query->where('sub_environment', $section->sub_environment), fn ($query) => $query->whereNull('sub_environment'));
+
+        if ((clone $matchingSections)->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->exists()) {
+            return redirect()
+                ->route('monitoraggi.index', array_filter([
+                    'view' => 'gestione-sezioni',
+                    'env' => $section->environment,
+                    'sub' => $section->sub_environment,
+                ]))
+                ->withErrors(['name' => 'Esiste gia una sezione con questo nome nell\'ambiente selezionato.']);
+        }
+
+        $attributes = ['name' => $name];
+        if (filled($data['code'] ?? null)) {
+            $code = Str::slug($data['code']);
+
+            if ($code === '') {
+                return back()->withErrors(['code' => 'Il codice sezione non e valido.']);
+            }
+
+            if (MonitoringSection::query()->where('code', $code)->whereKeyNot($section->id)->exists()) {
+                return back()->withErrors(['code' => 'Il codice sezione e gia utilizzato.']);
+            }
+
+            $attributes['code'] = $code;
+        }
+
+        $section->update($attributes);
+
+        return redirect()
+            ->route('monitoraggi.index', array_filter([
+                'view' => 'gestione-sezioni',
+                'env' => $section->environment,
+                'sub' => $section->sub_environment,
+            ]))
+            ->with('status', "Sezione '{$section->name}' aggiornata.");
+    }
+
+    /**
+     * Move a section up or down within its environment.
+     */
+    public function moveSection(Request $request, MonitoringSection $section): RedirectResponse
+    {
+        $data = $request->validate([
+            'direction' => ['required', 'in:up,down'],
+        ]);
+
+        $sections = MonitoringSection::query()
+            ->where('environment', $section->environment)
+            ->when($section->sub_environment, fn ($query) => $query->where('sub_environment', $section->sub_environment), fn ($query) => $query->whereNull('sub_environment'))
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'sort_order']);
+        $index = $sections->search(fn ($item) => (int) $item->id === (int) $section->id);
+        $targetIndex = $index === false ? null : ($data['direction'] === 'up' ? $index - 1 : $index + 1);
+
+        if ($targetIndex === null || ! isset($sections[$targetIndex])) {
+            return redirect()
+                ->route('monitoraggi.index', array_filter([
+                    'view' => 'gestione-sezioni',
+                    'env' => $section->environment,
+                    'sub' => $section->sub_environment,
+                ]))
+                ->with('status', 'La sezione e gia alla posizione limite.');
+        }
+
+        $targetSection = $sections[$targetIndex];
+
+        DB::transaction(function () use ($section, $targetSection): void {
+            $currentOrder = (float) $section->sort_order;
+
+            $section->update(['sort_order' => $targetSection->sort_order]);
+            MonitoringSection::query()->whereKey($targetSection->id)->update(['sort_order' => $currentOrder]);
+        });
+
+        return redirect()
+            ->route('monitoraggi.index', array_filter([
+                'view' => 'gestione-sezioni',
+                'env' => $section->environment,
+                'sub' => $section->sub_environment,
+            ]))
+            ->with('status', 'Ordine sezioni aggiornato.');
     }
 
     /**
