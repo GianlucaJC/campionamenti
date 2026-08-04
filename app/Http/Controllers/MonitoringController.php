@@ -34,8 +34,8 @@ class MonitoringController extends Controller
 
         if ($request->user()?->isAdmin()) {
             $adminMenuItems = [
-                ['key' => 'gestione-sezioni', 'label' => 'Gestione sezioni'],
-                ['key' => 'gestione-reparti', 'label' => 'Gestione reparti'],
+                ['key' => 'gestione-sezioni', 'label' => 'Gestione reparti'],
+                ['key' => 'gestione-reparti', 'label' => 'Gestione tipo di campionamento'],
                 ['key' => 'gestione-punti', 'label' => 'Gestione punti campionamento'],
                 ['key' => 'trend', 'label' => 'Trend'],
             ];

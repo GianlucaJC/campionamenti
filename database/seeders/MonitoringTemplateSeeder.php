@@ -135,8 +135,6 @@ class MonitoringTemplateSeeder extends Seeder
                 ],
                 'departments' => [
                     ['code' => 'laminar', 'name' => 'Laminar flow', 'sort_order' => 10],
-                    ['code' => 'ambiente', 'name' => 'Ambiente', 'sort_order' => 20],
-                    ['code' => 'controlli', 'name' => 'Controlli', 'sort_order' => 30],
                 ],
                 'points' => [
                     ['legacy_code' => '1', 'title' => 'Laminar flow: Macchina piastre MP02 Modulo 01A', 'department_code' => 'laminar', 'default_volume_liters' => 1000, 'sort_order' => 10],
@@ -278,7 +276,6 @@ class MonitoringTemplateSeeder extends Seeder
                 ],
                 'departments' => [
                     ['code' => 'laminar', 'name' => 'Laminar flow', 'sort_order' => 10],
-                    ['code' => 'ambiente', 'name' => 'Ambiente', 'sort_order' => 20],
                     ['code' => 'superfici', 'name' => 'Superfici', 'sort_order' => 30],
                     ['code' => 'controlli', 'name' => 'Controlli', 'sort_order' => 40],
                 ],
