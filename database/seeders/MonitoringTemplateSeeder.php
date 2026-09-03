@@ -754,44 +754,6 @@ class MonitoringTemplateSeeder extends Seeder
                     ['legacy_code' => 'CN4', 'title' => 'Controllo negativo', 'department_code' => 'controlli', 'sample_kind' => 'surface_swab', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 60],
                 ],
             ],
-            [
-                'section' => [
-                    'code' => 'acque_processo',
-                    'environment' => 'acque',
-                    'name' => 'Acque di processo (storico)',
-                    'description' => 'Sezione legacy generica mantenuta per preservare eventuale storico precedente.',
-                    'sort_order' => 110,
-                    'is_active' => false,
-                ],
-                'departments' => [
-                    ['code' => 'punti_uso', 'name' => 'Punti uso', 'sort_order' => 10],
-                    ['code' => 'controlli', 'name' => 'Controlli', 'sort_order' => 20],
-                ],
-                'points' => [
-                    ['legacy_code' => '451', 'title' => 'Rubinetto produzione', 'department_code' => 'punti_uso', 'sample_kind' => 'surface_swab', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 10],
-                    ['legacy_code' => '452', 'title' => 'Punto campionamento loop acqua', 'department_code' => 'punti_uso', 'sample_kind' => 'surface_swab', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 20],
-                    ['legacy_code' => '453', 'title' => 'Controllo negativo acque', 'department_code' => 'controlli', 'sample_kind' => 'surface_swab', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 30],
-                ],
-            ],
-            [
-                'section' => [
-                    'code' => 'operatori_controllo',
-                    'environment' => 'operatori',
-                    'name' => 'Controllo operatori (storico)',
-                    'description' => 'Sezione storica generica mantenuta per preservare eventuali registrazioni pregresse.',
-                    'sort_order' => 120,
-                    'is_active' => false,
-                ],
-                'departments' => [
-                    ['code' => 'operatori', 'name' => 'Operatori', 'sort_order' => 10],
-                    ['code' => 'controlli', 'name' => 'Controlli', 'sort_order' => 20],
-                ],
-                'points' => [
-                    ['legacy_code' => '501', 'title' => 'Guanto mano destra', 'department_code' => 'operatori', 'sample_kind' => 'surface_contact', 'requires_product_lot' => false, 'sort_order' => 10],
-                    ['legacy_code' => '502', 'title' => 'Guanto mano sinistra', 'department_code' => 'operatori', 'sample_kind' => 'surface_contact', 'requires_product_lot' => false, 'sort_order' => 20],
-                    ['legacy_code' => '503', 'title' => 'Controllo negativo operatori', 'department_code' => 'controlli', 'sample_kind' => 'surface_contact', 'requires_operational_status' => false, 'requires_product_lot' => false, 'sort_order' => 30],
-                ],
-            ],
         ];
 
         foreach ($operatorSections as $index => $operatorSection) {
