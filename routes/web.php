@@ -31,6 +31,8 @@ Route::middleware(['auth', 'role:admin,operatore'])->group(function () {
 
 // Accessibile solo da operatore (inserimento campionamento)
 Route::middleware(['auth', 'role:operatore'])->group(function () {
+    Route::put('/monitoraggi/sessions/{session}', [MonitoringController::class, 'updateSamplingSession'])
+        ->name('monitoraggi.sessions.update');
     Route::post('/monitoraggi/{section}/checks', [MonitoringController::class, 'store'])
         ->name('monitoraggi.checks.store');
     Route::patch('/monitoraggi/{section}/checks/{check}', [MonitoringController::class, 'updateCheck'])

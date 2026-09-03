@@ -120,4 +120,23 @@ class MicrobiologicalCheck extends Model
     {
         return $this->hasMany(MicrobiologicalCheckPhaseState::class);
     }
+
+    public function hasSignature(): bool
+    {
+        $phaseStates = $this->relationLoaded('phaseStates')
+            ? $this->phaseStates
+            : $this->phaseStates()->get();
+
+        return $phaseStates->contains(fn ($state) => filled($state->signed_at))
+            || collect([
+                $this->sampling_completed_signature,
+                $this->first_reading_completed_signature,
+                $this->second_reading_completed_signature,
+                $this->incubation_started_signature,
+                $this->incubation_finished_signature,
+                $this->sampling_completed_by_user_id,
+                $this->first_reading_completed_by_user_id,
+                $this->second_reading_completed_by_user_id,
+            ])->contains(fn ($value) => filled($value));
+    }
 }

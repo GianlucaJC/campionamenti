@@ -685,6 +685,11 @@
             flex-wrap: wrap;
         }
 
+        .sampling-section-form .meta-grid,
+        .sampling-section-form .water-sampling-sheet {
+            display: none;
+        }
+
         .archive-water-meta {
             margin-top: 8px;
             display: grid;
@@ -1037,6 +1042,30 @@
     </header>
 
     <section class="section-list">
+        @if ($currentView === 'nuovo' && auth()->user()?->isOperatore())
+            @php
+                $sessionHeader = $samplingSession?->header ?? [];
+            @endphp
+            <article class="archive-card">
+                <h2 class="section-title" style="margin-bottom: 8px;">Intestazione sessione</h2>
+                <p class="hint">Questi dati saranno applicati a tutte le sezioni dell'ambiente {{ $environmentLabels[$currentEnvironment] ?? $currentEnvironment }}.</p>
+                <form action="{{ route('monitoraggi.sessions.update', $samplingSessionId) }}" method="POST" class="meta-grid" style="margin-top: 12px;">
+                    @csrf
+                    @method('PUT')
+                    <input type="hidden" name="sampling_session_id" value="{{ $samplingSessionId }}">
+                    <input type="hidden" name="environment" value="{{ $currentEnvironment }}">
+                    <input type="hidden" name="sub_environment" value="{{ $currentSubEnvironment }}">
+                    <div class="field"><label for="session_sampled_on">Data prelievo</label><input id="session_sampled_on" type="date" name="sampled_on" value="{{ old('sampled_on', data_get($sessionHeader, 'sampled_on', now()->toDateString())) }}" required></div>
+                    <div class="field"><label for="session_incubation_started_on">Inizio incubazione</label><input id="session_incubation_started_on" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', data_get($sessionHeader, 'incubation_started_on')) }}"></div>
+                    <div class="field"><label for="session_operator_name">Firma campionatore</label><input id="session_operator_name" type="text" name="operator_name" value="{{ old('operator_name', data_get($sessionHeader, 'operator_name', auth()->user()?->name)) }}" maxlength="120"></div>
+                    <div class="field"><label for="session_cq_operator_name">Operatore CQ</label><input id="session_cq_operator_name" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', data_get($sessionHeader, 'cq_operator_name')) }}" maxlength="120"></div>
+                    <div class="field"><label for="session_media_lot">Lotto piastre</label><input id="session_media_lot" type="text" name="media_lot" value="{{ old('media_lot', data_get($sessionHeader, 'media_lot')) }}" maxlength="120"></div>
+                    <div class="field"><label for="session_swab_lot">Lotto provette/swab</label><input id="session_swab_lot" type="text" name="swab_lot" value="{{ old('swab_lot', data_get($sessionHeader, 'swab_lot')) }}" maxlength="120"></div>
+                    <div class="field" style="align-self:end;"><button type="submit">Salva intestazione</button></div>
+                </form>
+            </article>
+        @endif
+
         @if ($currentView === 'archivio')
             <article class="archive-card">
                 <h2 class="section-title" style="margin-bottom: 8px;">Archivio campionamenti</h2>
@@ -1088,13 +1117,7 @@
                 </form>
 
                 <div class="archive-grid">
-                    @php
-                        $archiveItems = method_exists($archiveChecks, 'getCollection') ? $archiveChecks->getCollection() : collect($archiveChecks);
-                        $checksBySession = $archiveItems->groupBy(
-                            fn ($check) => $check->sampling_session_id ?: "legacy-{$check->id}"
-                        );
-                    @endphp
-                    @forelse ($checksBySession as $sessionChecks)
+                    @forelse ($archiveChecksBySession as $sessionChecks)
                         <div class="archive-date-group">
                             <div class="archive-date-head">
                                 <h3 class="archive-date-title">{{ \Carbon\Carbon::parse($sessionChecks->max('sampled_on'))->format('d-m-Y') }}</h3>
@@ -1109,19 +1132,6 @@
 
                             @foreach ($sessionChecks as $check)
                                 <div class="archive-item archive-item-sampled" style="margin-top:8px;">
-                                    @php
-                                        $hasCheckSignature = $check->phaseStates->contains(fn ($state) => filled($state->signed_at))
-                                            || collect([
-                                                $check->sampling_completed_signature,
-                                                $check->first_reading_completed_signature,
-                                                $check->second_reading_completed_signature,
-                                                $check->incubation_started_signature,
-                                                $check->incubation_finished_signature,
-                                                $check->sampling_completed_by_user_id,
-                                                $check->first_reading_completed_by_user_id,
-                                                $check->second_reading_completed_by_user_id,
-                                            ])->contains(fn ($value) => filled($value));
-                                    @endphp
                                     <div class="archive-item-head">
                                         <strong>
                                             @if (! $check->trashed())
@@ -1154,11 +1164,11 @@
                                             <form action="{{ route('monitoraggi.checks.delete', $check) }}" method="POST">
                                                 @csrf
                                                 @method('DELETE')
-                                                @if ($hasCheckSignature)
+                                                @if ($check->hasSignature())
                                                     <label class="hint" for="delete_reason_{{ $check->id }}">Motivazione eliminazione</label>
                                                     <input id="delete_reason_{{ $check->id }}" type="text" name="deletion_reason" maxlength="1000" required placeholder="Motivazione obbligatoria">
                                                 @endif
-                                                <button type="submit" class="btn-small danger-btn" onclick="return confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.');">{{ $hasCheckSignature ? 'Elimina con motivazione' : 'Elimina' }}</button>
+                                                <button type="submit" class="btn-small danger-btn" onclick="return confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.');">{{ $check->hasSignature() ? 'Elimina con motivazione' : 'Elimina' }}</button>
                                             </form>
                                         @endif
                                         @if (auth()->user()?->isAdmin() && $check->trashed())
@@ -1583,7 +1593,7 @@
                         ->filter()
                         ->first() ?? $section->samplingPoints->pluck('sample_kind')->filter()->first();
                     $isEditingSection = $editingCheck && (int) $editingCheck->monitoring_section_id === (int) $section->id;
-                    $headerCheck = $isEditingSection ? $editingCheck : $samplingSessionHeader;
+                    $headerCheck = $isEditingSection ? $editingCheck : ($samplingSession ? (object) $samplingSession->header : null);
                     $editingPointResults = $isEditingSection ? $editingCheck->pointResults->keyBy('sampling_point_id') : collect();
                     $phaseStates = $isEditingSection ? $editingCheck->phaseStates->keyBy('phase') : collect();
                     $activePhaseState = $phaseStates->get($productionPhase);
@@ -1805,7 +1815,7 @@
                         @endif
 
                         @if ($currentEnvironment === 'clean_room' && auth()->user()?->isOperatore() && $currentView === 'nuovo')
-                            <form action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
+                            <form class="sampling-section-form" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
                                 @csrf
                                 @if ($isEditingSection)
                                     @method('PATCH')
@@ -1957,7 +1967,7 @@
                                 @endif
                             </form>
                         @elseif (auth()->user()?->isOperatore() && $currentView === 'nuovo')
-                            <form action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
+                            <form class="sampling-section-form" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
                                 @csrf
                                 @if ($isEditingSection)
                                     @method('PATCH')

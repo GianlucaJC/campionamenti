@@ -8,6 +8,7 @@ use App\Models\MicrobiologicalCheckPhaseLog;
 use App\Models\MicrobiologicalCheckPhaseState;
 use App\Models\MonitoringDepartment;
 use App\Models\MonitoringSection;
+use App\Models\SamplingSession;
 use App\Models\SamplingPoint;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -156,18 +157,12 @@ class MonitoringController extends Controller
             $productionPhase = 'sampling';
         }
 
-        $samplingSessionHeader = null;
+        $samplingSession = null;
         if ($samplingSessionId) {
-            $samplingSessionHeader = MicrobiologicalCheck::query()
-                ->where('sampling_session_id', $samplingSessionId)
-                ->whereHas('section', function ($query) use ($currentEnvironment, $currentSubEnvironment, $availableSubEnvironments): void {
-                    $query->where('environment', $currentEnvironment);
-
-                    if ($availableSubEnvironments->isNotEmpty()) {
-                        $query->where('sub_environment', $currentSubEnvironment);
-                    }
-                })
-                ->latest('id')
+            $samplingSession = SamplingSession::query()
+                ->whereKey($samplingSessionId)
+                ->where('environment', $currentEnvironment)
+                ->where('sub_environment', $currentSubEnvironment)
                 ->first();
         }
 
@@ -183,6 +178,7 @@ class MonitoringController extends Controller
         }
 
         $archiveChecks = collect();
+        $archiveChecksBySession = collect();
         $editingCheck = null;
         if ($currentView === 'archivio') {
             $archiveQuery = MicrobiologicalCheck::query()
@@ -235,6 +231,10 @@ class MonitoringController extends Controller
             $archiveChecks = $archiveQuery
                 ->paginate($archivePerPage)
                 ->withQueryString();
+
+            $archiveChecksBySession = $archiveChecks->getCollection()->groupBy(
+                fn (MicrobiologicalCheck $check) => $check->sampling_session_id ?: 'legacy-'.$check->id
+            );
         }
 
         $editingCheckId = $request->query('edit_check');
@@ -405,13 +405,14 @@ class MonitoringController extends Controller
             'sections' => $sections,
             'filteredSections' => $filteredSections,
             'archiveChecks' => $archiveChecks,
+            'archiveChecksBySession' => $archiveChecksBySession,
             'archiveFrom' => $archiveFrom,
             'archiveTo' => $archiveTo,
             'archivePerPage' => $archivePerPage,
             'archiveStatus' => $archiveStatus,
             'editingCheck' => $editingCheck,
             'samplingSessionId' => $samplingSessionId,
-            'samplingSessionHeader' => $samplingSessionHeader,
+            'samplingSession' => $samplingSession,
             'trendEnvironments' => $trendEnvironments,
             'trendFrom' => $trendFrom,
             'trendTo' => $trendTo,
@@ -430,6 +431,9 @@ class MonitoringController extends Controller
             abort(403, 'Solo un operatore puo compilare e salvare il campionamento.');
         }
 
+        $samplingSession = $this->sessionForSection($request, $section);
+        $request->merge(array_merge($request->all(), $samplingSession->header));
+
         $pointCollection = $section->samplingPoints()
             ->with('department')
             ->where('is_active', true)
@@ -440,7 +444,7 @@ class MonitoringController extends Controller
         $data = $request->validate($this->buildCheckRules($pointCollection));
         $userId = (int) Auth::id();
         $isPhasedEnvironment = $this->isPhasedEnvironment($section);
-        $samplingSessionId = $data['sampling_session_id'] ?? (string) Str::uuid();
+        $samplingSessionId = $samplingSession->id;
 
         if ($isPhasedEnvironment) {
             $this->ensureProductionPhaseCanBeAccessed($data, $section);
@@ -475,6 +479,48 @@ class MonitoringController extends Controller
             ->with('status', "Sezione '{$section->name}' salvata con successo.");
     }
 
+    public function updateSamplingSession(Request $request, string $session): RedirectResponse
+    {
+        if (! $request->user() || ! $request->user()->isOperatore()) {
+            abort(403, 'Solo un operatore puo compilare il campionamento.');
+        }
+
+        $rules = $this->buildCheckRules(collect());
+        unset($rules['points']);
+        $rules['sampling_session_id'] = ['required', 'uuid'];
+        $data = $request->validate($rules);
+
+        if ($data['sampling_session_id'] !== $session) {
+            abort(404);
+        }
+
+        $environment = (string) $request->input('environment');
+        $subEnvironment = $request->input('sub_environment') ?: null;
+
+        $header = $this->checkHeaderPayload($data);
+
+        SamplingSession::query()->updateOrCreate(
+            ['id' => $session],
+            [
+                'environment' => $environment,
+                'sub_environment' => $subEnvironment,
+                'header' => $header,
+                'created_by_user_id' => $request->user()->id,
+            ]
+        );
+
+        MicrobiologicalCheck::query()
+            ->where('sampling_session_id', $session)
+            ->update($header);
+
+        return redirect()->route('monitoraggi.index', array_filter([
+            'view' => 'nuovo',
+            'env' => $environment,
+            'sub' => $subEnvironment,
+            'session' => $session,
+        ]))->with('status', 'Intestazione della sessione salvata.');
+    }
+
     /**
      * Update an existing saved check.
      */
@@ -489,6 +535,11 @@ class MonitoringController extends Controller
 
         if ((int) $check->monitoring_section_id !== (int) $section->id) {
             abort(404, 'Campionamento non coerente con la sezione richiesta.');
+        }
+
+        $samplingSession = SamplingSession::query()->find($check->sampling_session_id);
+        if ($samplingSession) {
+            $request->merge(array_merge($request->all(), $samplingSession->header));
         }
 
         $pointCollection = $section->samplingPoints()
@@ -730,6 +781,24 @@ class MonitoringController extends Controller
         }
 
         return $rules;
+    }
+
+    private function sessionForSection(Request $request, MonitoringSection $section): SamplingSession
+    {
+        $sessionId = $request->validate(['sampling_session_id' => ['required', 'uuid']])['sampling_session_id'];
+        $samplingSession = SamplingSession::query()
+            ->whereKey($sessionId)
+            ->where('environment', $section->environment ?: 'produzione')
+            ->where('sub_environment', $section->sub_environment)
+            ->first();
+
+        if (! $samplingSession) {
+            throw ValidationException::withMessages([
+                'sampling_session_id' => 'Salva prima l\'intestazione della sessione.',
+            ]);
+        }
+
+        return $samplingSession;
     }
 
     private function isPhasedEnvironment(MonitoringSection $section): bool
