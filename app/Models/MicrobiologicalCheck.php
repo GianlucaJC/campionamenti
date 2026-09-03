@@ -19,6 +19,7 @@ class MicrobiologicalCheck extends Model
      */
     protected $fillable = [
         'monitoring_section_id',
+        'sampling_session_id',
         'facility_name',
         'sampled_on',
         'sampled_time',

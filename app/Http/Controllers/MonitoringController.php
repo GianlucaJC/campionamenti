@@ -48,6 +48,14 @@ class MonitoringController extends Controller
             $currentView = 'nuovo';
         }
 
+        $samplingSessionId = null;
+        if ($currentView === 'nuovo' && $request->user()?->isOperatore()) {
+            $requestedSessionId = (string) $request->query('session', '');
+            $samplingSessionId = Str::isUuid($requestedSessionId)
+                ? $requestedSessionId
+                : (string) Str::uuid();
+        }
+
         $environmentLabels = [
             'produzione' => 'Produzione',
             'clean_room' => 'Clean room',
@@ -146,6 +154,21 @@ class MonitoringController extends Controller
 
         if (! array_key_exists($productionPhase, $productionPhases)) {
             $productionPhase = 'sampling';
+        }
+
+        $samplingSessionHeader = null;
+        if ($samplingSessionId) {
+            $samplingSessionHeader = MicrobiologicalCheck::query()
+                ->where('sampling_session_id', $samplingSessionId)
+                ->whereHas('section', function ($query) use ($currentEnvironment, $currentSubEnvironment, $availableSubEnvironments): void {
+                    $query->where('environment', $currentEnvironment);
+
+                    if ($availableSubEnvironments->isNotEmpty()) {
+                        $query->where('sub_environment', $currentSubEnvironment);
+                    }
+                })
+                ->latest('id')
+                ->first();
         }
 
         $archiveFrom = $request->query('archive_from');
@@ -387,6 +410,8 @@ class MonitoringController extends Controller
             'archivePerPage' => $archivePerPage,
             'archiveStatus' => $archiveStatus,
             'editingCheck' => $editingCheck,
+            'samplingSessionId' => $samplingSessionId,
+            'samplingSessionHeader' => $samplingSessionHeader,
             'trendEnvironments' => $trendEnvironments,
             'trendFrom' => $trendFrom,
             'trendTo' => $trendTo,
@@ -415,14 +440,16 @@ class MonitoringController extends Controller
         $data = $request->validate($this->buildCheckRules($pointCollection));
         $userId = (int) Auth::id();
         $isPhasedEnvironment = $this->isPhasedEnvironment($section);
+        $samplingSessionId = $data['sampling_session_id'] ?? (string) Str::uuid();
 
         if ($isPhasedEnvironment) {
             $this->ensureProductionPhaseCanBeAccessed($data, $section);
         }
 
-        $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId, $isPhasedEnvironment): int {
+        $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId, $isPhasedEnvironment, $samplingSessionId): int {
             $check = MicrobiologicalCheck::query()->create([
                 'monitoring_section_id' => $section->id,
+            'sampling_session_id' => $samplingSessionId,
                 'sampled_on' => $data['sampled_on'],
                 'created_by_user_id' => $userId,
             ]);
@@ -443,6 +470,7 @@ class MonitoringController extends Controller
                 'sub' => $section->sub_environment ?: null,
                 'phase' => $data['entry_phase'] ?? null,
                 'edit_check' => $checkId,
+                'session' => $samplingSessionId,
             ]))
             ->with('status', "Sezione '{$section->name}' salvata con successo.");
     }
@@ -484,6 +512,7 @@ class MonitoringController extends Controller
                     'sub' => $section->sub_environment ?: null,
                     'edit_check' => $check->id,
                     'phase' => $data['entry_phase'],
+                    'session' => $check->sampling_session_id,
                 ]))
                 ->with('status', "Intestazione della sezione '{$section->name}' aggiornata con successo.");
         }
@@ -500,6 +529,7 @@ class MonitoringController extends Controller
                     'env' => $section->environment ?: 'produzione',
                     'sub' => $section->sub_environment ?: null,
                     'edit_check' => $check->id,
+                    'session' => $check->sampling_session_id,
                 ]))
                 ->with('status', "Sezione '{$section->name}' aggiornata con successo.");
         }
@@ -520,6 +550,7 @@ class MonitoringController extends Controller
                     'sub' => $section->sub_environment ?: null,
                     'edit_check' => $check->id,
                     'phase' => $data['entry_phase'] ?? null,
+                    'session' => $check->sampling_session_id,
                 ]))
                 ->with('status', "Fase della sezione '{$section->name}' riaperta in scrittura.");
         }
@@ -537,6 +568,7 @@ class MonitoringController extends Controller
                 'sub' => $section->sub_environment ?: null,
                 'edit_check' => $check->id,
                 'phase' => $data['entry_phase'] ?? null,
+                'session' => $check->sampling_session_id,
             ]))
             ->with('status', "Sezione '{$section->name}' aggiornata con successo.");
     }
@@ -605,6 +637,7 @@ class MonitoringController extends Controller
             'save_header' => ['nullable', 'boolean'],
             'reopen_phase' => ['nullable', 'boolean'],
             'reopening_reason' => ['nullable', 'string', 'max:1000'],
+            'sampling_session_id' => ['nullable', 'uuid'],
             'facility_name' => ['nullable', 'string', 'max:120'],
             'sampled_on' => ['required', 'date'],
             'sampled_time' => ['nullable', 'date_format:H:i'],

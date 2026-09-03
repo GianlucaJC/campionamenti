@@ -672,6 +672,19 @@
             gap: 5px;
         }
 
+        .archive-item-sampled {
+            border-color: #79aaa3;
+            background: #f1faf7;
+        }
+
+        .archive-item-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
         .archive-water-meta {
             margin-top: 8px;
             display: grid;
@@ -1077,23 +1090,25 @@
                 <div class="archive-grid">
                     @php
                         $archiveItems = method_exists($archiveChecks, 'getCollection') ? $archiveChecks->getCollection() : collect($archiveChecks);
-                        $checksByDate = $archiveItems->groupBy('sampled_on');
+                        $checksBySession = $archiveItems->groupBy(
+                            fn ($check) => $check->sampling_session_id ?: "legacy-{$check->id}"
+                        );
                     @endphp
-                    @forelse ($checksByDate as $sampledOn => $checksOnDate)
+                    @forelse ($checksBySession as $sessionChecks)
                         <div class="archive-date-group">
                             <div class="archive-date-head">
-                                <h3 class="archive-date-title">{{ \Carbon\Carbon::parse($sampledOn)->format('d-m-Y') }}</h3>
-                                <span class="hint">{{ $checksOnDate->count() }} sezioni compilate</span>
+                                <h3 class="archive-date-title">{{ \Carbon\Carbon::parse($sessionChecks->max('sampled_on'))->format('d-m-Y') }}</h3>
+                                <span class="hint">{{ $sessionChecks->count() }} sezioni campionate · {{ $sessionChecks->sum('point_results_count') }} punti compilati</span>
                             </div>
 
                             <div class="archive-section-tags">
-                                @foreach ($checksOnDate->pluck('section.name')->filter()->unique() as $sectionName)
-                                    <span class="archive-section-tag">{{ $sectionName }}</span>
+                                @foreach ($sessionChecks as $sessionCheck)
+                                    <span class="archive-section-tag">{{ $sessionCheck->section?->name ?? 'Sezione rimossa' }}: {{ $sessionCheck->point_results_count }} punti</span>
                                 @endforeach
                             </div>
 
-                            @foreach ($checksOnDate as $check)
-                                <div class="archive-item" style="margin-top:8px;">
+                            @foreach ($sessionChecks as $check)
+                                <div class="archive-item archive-item-sampled" style="margin-top:8px;">
                                     @php
                                         $hasCheckSignature = $check->phaseStates->contains(fn ($state) => filled($state->signed_at))
                                             || collect([
@@ -1107,22 +1122,24 @@
                                                 $check->second_reading_completed_by_user_id,
                                             ])->contains(fn ($value) => filled($value));
                                     @endphp
-                                    <strong>
-                                        @if (! $check->trashed())
-                                            <a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}" style="color: inherit; text-decoration: none;">
+                                    <div class="archive-item-head">
+                                        <strong>
+                                            @if (! $check->trashed())
+                                                <a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id, 'session' => $check->sampling_session_id])) }}" style="color: inherit; text-decoration: none;">
+                                                    {{ $check->section?->name ?? 'Sezione rimossa' }}
+                                                </a>
+                                            @else
                                                 {{ $check->section?->name ?? 'Sezione rimossa' }}
-                                            </a>
-                                        @else
-                                            {{ $check->section?->name ?? 'Sezione rimossa' }}
-                                        @endif
-                                    </strong>
+                                            @endif
+                                        </strong>
+                                        <span class="badge">{{ $check->point_results_count }} punti compilati</span>
+                                    </div>
                                     @if ($check->trashed())
                                         <span class="badge soft">Eliminato</span>
                                     @endif
                                     @if ($currentEnvironment === 'acque')
                                         <span class="badge soft">Acque</span>
                                     @endif
-                                    <span class="hint">Punti compilati: {{ $check->point_results_count }}</span>
                                     <span class="hint">Operatore: {{ $check->operator_name ?: ($check->author?->name ?: '-') }}</span>
                                     @if ($currentEnvironment === 'acque' && $check->sampled_time)
                                         <span class="hint">Ora prelievo: {{ substr((string) $check->sampled_time, 0, 5) }}</span>
@@ -1566,6 +1583,7 @@
                         ->filter()
                         ->first() ?? $section->samplingPoints->pluck('sample_kind')->filter()->first();
                     $isEditingSection = $editingCheck && (int) $editingCheck->monitoring_section_id === (int) $section->id;
+                    $headerCheck = $isEditingSection ? $editingCheck : $samplingSessionHeader;
                     $editingPointResults = $isEditingSection ? $editingCheck->pointResults->keyBy('sampling_point_id') : collect();
                     $phaseStates = $isEditingSection ? $editingCheck->phaseStates->keyBy('phase') : collect();
                     $activePhaseState = $phaseStates->get($productionPhase);
@@ -1793,34 +1811,36 @@
                                     @method('PATCH')
                                 @endif
 
+                                <input type="hidden" name="sampling_session_id" value="{{ $isEditingSection ? $editingCheck->sampling_session_id : $samplingSessionId }}">
+
                                 <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
 
                                 <div class="meta-grid">
                                     <div class="field">
                                         <label for="sampled_on_{{ $section->id }}">Data prelievo / inizio incubazione</label>
-                                        <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $isEditingSection ? $editingCheck->sampled_on : now()->toDateString()) }}" required>
+                                        <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $headerCheck?->sampled_on ?: now()->toDateString()) }}" required>
                                     </div>
                                     <div class="field">
                                         <label for="operator_name_{{ $section->id }}">Operatore in clean room</label>
-                                        <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : null) }}" maxlength="120">
+                                        <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $headerCheck?->operator_name) }}" maxlength="120">
                                     </div>
                                     <div class="field">
                                         <label for="cq_operator_name_{{ $section->id }}">Operatore CQ</label>
-                                        <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $isEditingSection ? $editingCheck->cq_operator_name : null) }}" maxlength="120">
+                                        <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $headerCheck?->cq_operator_name) }}" maxlength="120">
                                     </div>
                                     <div class="field">
                                         <label for="product_lot_{{ $section->id }}">Lotto prodotto</label>
-                                        <input id="product_lot_{{ $section->id }}" type="text" name="product_batch" value="{{ old('product_batch', $isEditingSection ? $editingCheck->product_batch : null) }}" maxlength="120">
+                                        <input id="product_lot_{{ $section->id }}" type="text" name="product_batch" value="{{ old('product_batch', $headerCheck?->product_batch) }}" maxlength="120">
                                     </div>
                                     @if ($sectionSampleKind === 'surface_swab')
                                         <div class="field">
                                             <label for="swab_lot_{{ $section->id }}">Lotto provette</label>
-                                            <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $isEditingSection ? $editingCheck->swab_lot : null) }}" maxlength="120">
+                                            <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $headerCheck?->swab_lot) }}" maxlength="120">
                                         </div>
                                     @else
                                         <div class="field">
                                             <label for="media_lot_{{ $section->id }}">Lotto piastre</label>
-                                            <input id="media_lot_{{ $section->id }}" type="text" name="media_lot" value="{{ old('media_lot', $isEditingSection ? $editingCheck->media_lot : null) }}" maxlength="120">
+                                            <input id="media_lot_{{ $section->id }}" type="text" name="media_lot" value="{{ old('media_lot', $headerCheck?->media_lot) }}" maxlength="120">
                                         </div>
                                     @endif
                                         @if ($isEditingSection)
@@ -1834,7 +1854,7 @@
                                         @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
                                             @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
                                             @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
-                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'clean_room', 'sub' => $currentSubEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'clean_room', 'sub' => $currentSubEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null, 'session' => $samplingSessionId])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
@@ -1943,6 +1963,8 @@
                                     @method('PATCH')
                                 @endif
 
+                                <input type="hidden" name="sampling_session_id" value="{{ $isEditingSection ? $editingCheck->sampling_session_id : $samplingSessionId }}">
+
                                 @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
                                 @endif
@@ -1953,35 +1975,35 @@
                                 <div class="meta-grid">
                                     <div class="field">
                                         <label for="sampled_on_{{ $section->id }}">Data prelievo</label>
-                                        <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $isEditingSection ? $editingCheck->sampled_on : now()->toDateString()) }}" required>
+                                        <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $headerCheck?->sampled_on ?: now()->toDateString()) }}" required>
                                     </div>
                                     @if ($currentEnvironment === 'acque')
                                         <div class="field">
                                             <label for="sampled_time_{{ $section->id }}">Ora prelievo</label>
-                                            <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', $isEditingSection ? $editingCheck->sampled_time : null) }}">
+                                            <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', $headerCheck?->sampled_time) }}">
                                         </div>
                                     @endif
                                     <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <label for="incubation_started_on_{{ $section->id }}">Inizio incubazione</label>
-                                        <input id="incubation_started_on_{{ $section->id }}" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', $isEditingSection ? $editingCheck->incubation_started_on : null) }}">
+                                        <input id="incubation_started_on_{{ $section->id }}" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', $headerCheck?->incubation_started_on) }}">
                                     </div>
                                     @if (! in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                         <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                             <label for="first_reading_on_{{ $section->id }}">1a lettura</label>
-                                            <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $isEditingSection ? $editingCheck->first_reading_on : null) }}">
+                                            <input id="first_reading_on_{{ $section->id }}" type="date" name="first_reading_on" value="{{ old('first_reading_on', $headerCheck?->first_reading_on) }}">
                                         </div>
                                         <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                             <label for="second_reading_on_{{ $section->id }}">2a lettura</label>
-                                            <input id="second_reading_on_{{ $section->id }}" type="date" name="second_reading_on" value="{{ old('second_reading_on', $isEditingSection ? $editingCheck->second_reading_on : null) }}">
+                                            <input id="second_reading_on_{{ $section->id }}" type="date" name="second_reading_on" value="{{ old('second_reading_on', $headerCheck?->second_reading_on) }}">
                                         </div>
                                     @endif
                                     <div class="field">
                                         <label for="operator_name_{{ $section->id }}">Firma campionatore</label>
-                                        <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $isEditingSection ? $editingCheck->operator_name : auth()->user()?->name) }}" maxlength="120">
+                                        <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $headerCheck?->operator_name ?: auth()->user()?->name) }}" maxlength="120">
                                     </div>
                                     <div class="field" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <label for="cq_operator_name_{{ $section->id }}">Operatore CQ</label>
-                                        <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $isEditingSection ? $editingCheck->cq_operator_name : null) }}" maxlength="120">
+                                        <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $headerCheck?->cq_operator_name) }}" maxlength="120">
                                     </div>
                                     @if ($currentEnvironment === 'acque')
                                         <div class="field" data-water-step-content="results">
@@ -2019,11 +2041,11 @@
                                     @else
                                         <div class="field">
                                             <label for="media_lot_{{ $section->id }}">Lotto piastre</label>
-                                            <input id="media_lot_{{ $section->id }}" type="text" name="media_lot" value="{{ old('media_lot', $isEditingSection ? $editingCheck->media_lot : null) }}" maxlength="120">
+                                            <input id="media_lot_{{ $section->id }}" type="text" name="media_lot" value="{{ old('media_lot', $headerCheck?->media_lot) }}" maxlength="120">
                                         </div>
                                         <div class="field">
                                             <label for="swab_lot_{{ $section->id }}">Lotto provette/swab</label>
-                                            <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $isEditingSection ? $editingCheck->swab_lot : null) }}" maxlength="120">
+                                            <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $headerCheck?->swab_lot) }}" maxlength="120">
                                         </div>
                                     @endif
                                     @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $isEditingSection)
