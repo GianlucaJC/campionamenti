@@ -1416,8 +1416,8 @@
                 <details class="section" open>
                     <summary>
                         <div>
-                            <p class="section-title">Gestione reparti per sezione</p>
-                            <p class="section-desc">Configurazione reparti nell'ambiente {{ $environmentLabels[$currentEnvironment] ?? $currentEnvironment }}.</p>
+                            <p class="section-title">Gestione tipi di punto per sezione</p>
+                            <p class="section-desc">Configurazione tipi di punto nell'ambiente {{ $environmentLabels[$currentEnvironment] ?? $currentEnvironment }}.</p>
                         </div>
                         <span class="badge soft">Admin</span>
                     </summary>
@@ -1438,7 +1438,7 @@
                                         @csrf
                                         @method('PATCH')
                                         <div class="actions" style="margin-bottom:10px;">
-                                            <p class="hint">Oscurando la sezione, gli operatori non vedranno {{ $section->name }} ne i relativi reparti e punti.</p>
+                                            <p class="hint">Oscurando la sezione, gli operatori non vedranno {{ $section->name }} ne i relativi tipi di punto e punti.</p>
                                             @if ($section->is_active)
                                                 <button type="submit" class="btn-small soft-btn" name="visibility_action" value="hide">Oscura sezione</button>
                                             @else
@@ -1450,11 +1450,11 @@
                                         @csrf
                                         <div class="department-grid">
                                             <div class="field">
-                                                <label for="new_department_name_global_{{ $section->id }}">Nome reparto</label>
+                                                <label for="new_department_name_global_{{ $section->id }}">Nome tipo di punto</label>
                                                 <input id="new_department_name_global_{{ $section->id }}" type="text" name="name" maxlength="120" required placeholder="es. Laminar flow">
                                             </div>
                                             <div class="field">
-                                                <label for="new_department_code_global_{{ $section->id }}">Codice reparto (opzionale)</label>
+                                                <label for="new_department_code_global_{{ $section->id }}">Codice tipo di punto (opzionale)</label>
                                                 <input id="new_department_code_global_{{ $section->id }}" type="text" name="code" maxlength="50" placeholder="es. laminar">
                                             </div>
                                             <div class="field">
@@ -1463,8 +1463,8 @@
                                             </div>
                                         </div>
                                         <div class="actions" style="margin-top:10px;">
-                                            <p class="hint">I reparti sono specifici della sezione corrente.</p>
-                                            <button type="submit">Aggiungi reparto</button>
+                                            <p class="hint">I tipi di punto sono specifici della sezione corrente.</p>
+                                            <button type="submit">Aggiungi tipo di punto</button>
                                         </div>
                                     </form>
 
@@ -1475,7 +1475,7 @@
                                                 @method('PATCH')
 
                                                 <div class="field">
-                                                    <label for="department_name_global_{{ $section->id }}_{{ $department->id }}">Nome reparto</label>
+                                                    <label for="department_name_global_{{ $section->id }}_{{ $department->id }}">Nome tipo di punto</label>
                                                     <input id="department_name_global_{{ $section->id }}_{{ $department->id }}" type="text" name="name" maxlength="120" value="{{ $department->name }}" required @disabled($department->trashed())>
                                                 </div>
 
@@ -1509,17 +1509,17 @@
                                                         @else
                                                             <button type="submit" class="btn-small soft-btn" name="quick_action" value="show">Riattiva</button>
                                                         @endif
-                                                        <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" data-admin-confirm data-confirm-title="Eliminare il reparto?" data-confirm-text="Il reparto sara rimosso dai dati operativi e potra essere recuperato solo dal pulsante Ripristina.">Elimina (ripristinabile)</button>
+                                                        <button type="submit" class="btn-small danger-btn" name="quick_action" value="delete" data-admin-confirm data-confirm-title="Eliminare il tipo di punto?" data-confirm-text="Il tipo di punto sara rimosso dai dati operativi e potra essere recuperato solo dal pulsante Ripristina.">Elimina (ripristinabile)</button>
                                                     @endif
                                                 </div>
 
                                                 @if (! $department->trashed())
-                                                    <button type="submit" class="btn-small">Salva reparto</button>
+                                                    <button type="submit" class="btn-small">Salva tipo di punto</button>
                                                 @endif
                                             </form>
                                         @empty
                                             <div class="department-row">
-                                                <p class="hint" style="grid-column: 1 / -1; margin: 0;">Nessun reparto configurato per questa sezione.</p>
+                                                <p class="hint" style="grid-column: 1 / -1; margin: 0;">Nessun tipo di punto configurato per questa sezione.</p>
                                             </div>
                                         @endforelse
                                     </div>
