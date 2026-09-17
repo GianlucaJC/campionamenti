@@ -172,6 +172,8 @@ class MonitoringController extends Controller
         $archiveStatus = $request->user()?->isAdmin() && $request->query('archive_status') === 'deleted'
             ? 'deleted'
             : 'active';
+        $archiveReadingsOnly = $currentEnvironment === 'produzione'
+            && $request->boolean('archive_readings_only');
 
         if (! in_array($archivePerPage, [10, 20, 50, 100], true)) {
             $archivePerPage = 20;
@@ -182,7 +184,12 @@ class MonitoringController extends Controller
         $editingCheck = null;
         if ($currentView === 'archivio') {
             $archiveQuery = MicrobiologicalCheck::query()
-                ->with(['section:id,name,environment,sub_environment', 'author:id,name', 'phaseStates'])
+                ->with([
+                    'section:id,name,environment,sub_environment',
+                    'section.departments:id,monitoring_section_id,readings_count',
+                    'author:id,name',
+                    'phaseStates',
+                ])
                 ->withCount('pointResults')
                 ->whereHas('section', function ($query) use ($currentEnvironment, $currentSubEnvironment, $availableSubEnvironments): void {
                     $query
@@ -220,6 +227,23 @@ class MonitoringController extends Controller
                 $archiveQuery->with(['pointResults.point']);
             }
 
+            if ($archiveReadingsOnly) {
+                $archiveQuery->where(function ($query): void {
+                    $query
+                        ->whereHas('phaseStates', function ($phaseQuery): void {
+                            $phaseQuery
+                                ->where('phase', 'sampling')
+                                ->where(function ($signedQuery): void {
+                                    $signedQuery
+                                        ->whereNotNull('signed_at')
+                                        ->orWhereNotNull('signed_by_user_id');
+                                });
+                        })
+                        ->orWhereNotNull('sampling_completed_signature')
+                        ->orWhereNotNull('sampling_completed_by_user_id');
+                });
+            }
+
             if (filled($archiveFrom)) {
                 $archiveQuery->whereDate('sampled_on', '>=', $archiveFrom);
             }
@@ -233,7 +257,7 @@ class MonitoringController extends Controller
                 ->withQueryString();
 
             $archiveChecksBySession = $archiveChecks->getCollection()->groupBy(
-                fn (MicrobiologicalCheck $check) => $check->sampling_session_id ?: 'legacy-'.$check->id
+                fn (MicrobiologicalCheck $check) => (string) $check->sampled_on ?: 'senza-data-'.$check->id
             );
         }
 
@@ -410,6 +434,7 @@ class MonitoringController extends Controller
             'archiveTo' => $archiveTo,
             'archivePerPage' => $archivePerPage,
             'archiveStatus' => $archiveStatus,
+            'archiveReadingsOnly' => $archiveReadingsOnly,
             'editingCheck' => $editingCheck,
             'samplingSessionId' => $samplingSessionId,
             'samplingSession' => $samplingSession,
@@ -675,6 +700,43 @@ class MonitoringController extends Controller
 
         return $this->redirectToArchive($check)
             ->with('status', 'Campionamento ripristinato correttamente.');
+    }
+
+    /**
+     * Record the final responsible signature after the second reading.
+     */
+    public function signResponsible(Request $request, MicrobiologicalCheck $check): RedirectResponse
+    {
+        if (! $request->user()?->isAdmin()) {
+            abort(403, 'Solo un admin puo firmare il completamento del campionamento.');
+        }
+
+        if ($check->trashed() || ! $this->isProductionPhaseSigned($check, 'reading_2')) {
+            return $this->redirectToArchive($check)
+                ->withErrors(['check' => 'La firma del responsabile richiede la seconda lettura firmata.']);
+        }
+
+        DB::transaction(function () use ($check, $request): void {
+            $check->phaseStates()->updateOrCreate(
+                ['phase' => 'responsible'],
+                [
+                    'signed_by_user_id' => $request->user()->id,
+                    'signed_at' => now(),
+                    'reopened_by_user_id' => null,
+                    'reopened_at' => null,
+                    'reopening_reason' => null,
+                ]
+            );
+            $check->phaseLogs()->create([
+                'phase' => 'responsible',
+                'action' => 'saved_and_signed',
+                'performed_by_user_id' => $request->user()->id,
+                'logged_at' => now(),
+            ]);
+        });
+
+        return $this->redirectToArchive($check)
+            ->with('status', 'Campionamento firmato dal responsabile.');
     }
 
     /**

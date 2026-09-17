@@ -43,6 +43,8 @@ Route::middleware(['auth', 'role:operatore'])->group(function () {
 
 // Accessibile solo da admin (gestione struttura)
 Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::post('/monitoraggi/checks/{check}/responsible-signature', [MonitoringController::class, 'signResponsible'])
+        ->name('monitoraggi.checks.responsible-signature');
     Route::patch('/monitoraggi/checks/{check}/restore', [MonitoringController::class, 'restoreCheck'])
         ->withTrashed()
         ->name('monitoraggi.checks.restore');

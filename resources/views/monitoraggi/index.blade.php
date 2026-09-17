@@ -663,6 +663,34 @@
             padding: 3px 10px;
         }
 
+        .archive-phase-status {
+            border-radius: 999px;
+            color: #fff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 3px 10px;
+        }
+
+        .archive-phase-status.waiting-first-reading { background: #c83f3a; }
+        .archive-phase-status.waiting-second-reading { background: #d97920; }
+        .archive-phase-status.waiting-responsible-signature { background: #b78b00; }
+        .archive-phase-status.complete { background: #2f8f5f; }
+
+        .archive-edit-button {
+            display: inline-block;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--accent);
+            text-decoration: none;
+        }
+
+        .archive-delete-link {
+            color: #b83232;
+            font-weight: 700;
+        }
+
         .archive-item {
             border: 1px solid #e2d7ca;
             border-radius: 12px;
@@ -1108,10 +1136,15 @@
                         <div class="field">
                             <button type="submit">Cerca</button>
                         </div>
+                        @if ($currentEnvironment === 'produzione')
+                            <div class="field">
+                                <button type="submit" name="archive_readings_only" value="1">Inserisci letture</button>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="actions" style="margin-top:0;">
-                        <p class="hint">Intervallo date facoltativo. Vuoto = tutte le date disponibili.</p>
+                        <p class="hint">Intervallo date facoltativo. Vuoto = tutte le date disponibili.@if ($archiveReadingsOnly) Filtro letture attivo: campionamento firmato.@endif</p>
                         <a class="menu-link" href="{{ route('monitoraggi.index', array_filter(['view' => 'archivio', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment])) }}">Reset filtri</a>
                     </div>
                 </form>
@@ -1131,6 +1164,19 @@
                             </div>
 
                             @foreach ($sessionChecks as $check)
+                                @php
+                                    $phaseStates = $check->phaseStates->keyBy('phase');
+                                    $isPhaseSigned = fn (string $phase) => filled($phaseStates->get($phase)?->signed_by_user_id);
+                                    $phaseStatus = ! $isPhaseSigned('sampling')
+                                        ? ['waiting-first-reading', 'In attesa prima lettura']
+                                        : (! $isPhaseSigned('reading_1')
+                                            ? ['waiting-first-reading', 'In attesa prima lettura']
+                                            : (! $isPhaseSigned('reading_2')
+                                                ? ['waiting-second-reading', 'In attesa seconda lettura']
+                                                : (! $isPhaseSigned('responsible')
+                                                    ? ['waiting-responsible-signature', 'In attesa di firma responsabile']
+                                                    : ['complete', 'Completo'])));
+                                @endphp
                                 <div class="archive-item archive-item-sampled" style="margin-top:8px;">
                                     <div class="archive-item-head">
                                         <strong>
@@ -1143,6 +1189,9 @@
                                             @endif
                                         </strong>
                                         <span class="badge">{{ $check->point_results_count }} punti compilati</span>
+                                        @if (in_array($currentEnvironment, ['produzione', 'clean_room', 'operatori'], true))
+                                            <span class="archive-phase-status {{ $phaseStatus[0] }}">{{ $phaseStatus[1] }}</span>
+                                        @endif
                                     </div>
                                     @if ($check->trashed())
                                         <span class="badge soft">Eliminato</span>
@@ -1156,7 +1205,7 @@
                                     @endif
                                     <span class="hint">Salvato il: {{ optional($check->created_at)->format('d-m-Y H:i') ?: '-' }}</span>
                                     @if (! $check->trashed())
-                                        <span class="hint"><a href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}">Apri in modifica</a></span>
+                                        <a class="archive-edit-button" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $check->id])) }}">Apri in modifica</a>
                                     @endif
 
                                     <div class="actions" style="margin-top:8px;">
@@ -1168,7 +1217,13 @@
                                                     <label class="hint" for="delete_reason_{{ $check->id }}">Motivazione eliminazione</label>
                                                     <input id="delete_reason_{{ $check->id }}" type="text" name="deletion_reason" maxlength="1000" required placeholder="Motivazione obbligatoria">
                                                 @endif
-                                                <button type="submit" class="btn-small danger-btn" onclick="return confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.');">{{ $check->hasSignature() ? 'Elimina con motivazione' : 'Elimina' }}</button>
+                                                <a class="archive-delete-link" href="#" onclick="if (confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.')) { this.closest('form').requestSubmit(); } return false;">{{ $check->hasSignature() ? 'Elimina con motivazione' : 'Elimina' }}</a>
+                                            </form>
+                                        @endif
+                                        @if (auth()->user()?->isAdmin() && ! $check->trashed() && $phaseStatus[0] === 'waiting-responsible-signature')
+                                            <form action="{{ route('monitoraggi.checks.responsible-signature', $check) }}" method="POST">
+                                                @csrf
+                                                <button type="submit" class="btn-small">Firma responsabile</button>
                                             </form>
                                         @endif
                                         @if (auth()->user()?->isAdmin() && $check->trashed())
