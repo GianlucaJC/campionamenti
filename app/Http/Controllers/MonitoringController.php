@@ -257,7 +257,7 @@ class MonitoringController extends Controller
                 ->withQueryString();
 
             $archiveChecksBySession = $archiveChecks->getCollection()->groupBy(
-                fn (MicrobiologicalCheck $check) => (string) $check->sampled_on ?: 'senza-data-'.$check->id
+                fn (MicrobiologicalCheck $check) => $check->sampling_session_id ?: ('legacy-'.$check->id)
             );
         }
 
@@ -277,8 +277,20 @@ class MonitoringController extends Controller
 
                 if (! $matchesEnvironment) {
                     $editingCheck = null;
+                } else {
+                    $samplingSessionId = $editingCheck->sampling_session_id;
+                    $samplingSession = SamplingSession::query()->find($samplingSessionId);
                 }
             }
+        }
+
+        $sessionChecksBySection = collect();
+        if ($currentView === 'nuovo' && $samplingSessionId && $samplingSession) {
+            $sessionChecksBySection = MicrobiologicalCheck::query()
+                ->with(['pointResults.readings', 'phaseStates'])
+                ->where('sampling_session_id', $samplingSessionId)
+                ->get()
+                ->keyBy('monitoring_section_id');
         }
 
         $trendEnvironments = collect($request->query('trend_environments', [$currentEnvironment]))
@@ -436,6 +448,7 @@ class MonitoringController extends Controller
             'archiveStatus' => $archiveStatus,
             'archiveReadingsOnly' => $archiveReadingsOnly,
             'editingCheck' => $editingCheck,
+            'sessionChecksBySection' => $sessionChecksBySection,
             'samplingSessionId' => $samplingSessionId,
             'samplingSession' => $samplingSession,
             'trendEnvironments' => $trendEnvironments,
@@ -544,6 +557,105 @@ class MonitoringController extends Controller
             'sub' => $subEnvironment,
             'session' => $session,
         ]))->with('status', 'Intestazione della sessione salvata.');
+    }
+
+    /**
+     * Save the active production phase for every section in a sampling session.
+     */
+    public function updateSamplingSessionPhase(Request $request, SamplingSession $session): RedirectResponse
+    {
+        if (! $request->user() || ! $request->user()->isOperatore()) {
+            abort(403, 'Solo un operatore puo compilare il campionamento.');
+        }
+
+        $phase = (string) $request->validate([
+            'entry_phase' => ['required', 'regex:/^(sampling|reading_[1-9][0-9]*)$/'],
+            'checks' => ['required', 'array'],
+            'sign_phase' => ['nullable', 'boolean'],
+        ])['entry_phase'];
+        $checksInput = $request->input('checks');
+
+        $sections = MonitoringSection::query()
+            ->where('is_active', true)
+            ->where(function ($query) use ($session): void {
+                $query->where('environment', $session->environment);
+
+                if ($session->environment === 'produzione') {
+                    $query->orWhereNull('environment');
+                }
+            })
+            ->where('sub_environment', $session->sub_environment)
+            ->with(['samplingPoints' => function ($query) {
+                $query->with('department')->where('is_active', true)->orderBy('sort_order');
+            }])
+            ->orderBy('sort_order')
+            ->get();
+
+        foreach ($sections as $section) {
+            if (! array_key_exists($section->id, $checksInput)) {
+                throw ValidationException::withMessages([
+                    'checks' => "Mancano i dati per la sezione '{$section->name}'.",
+                ]);
+            }
+        }
+
+        $userId = (int) Auth::id();
+        $firstCheckId = DB::transaction(function () use ($sections, $checksInput, $session, $phase, $request, $userId): int {
+            $firstCheckId = 0;
+
+            foreach ($sections as $section) {
+                $sectionRequest = Request::create('/', 'POST', array_merge(
+                    $checksInput[$section->id],
+                    [
+                        'sampling_session_id' => $session->id,
+                        'entry_phase' => $phase,
+                        'sign_phase' => $request->boolean('sign_phase'),
+                    ],
+                    $session->header
+                ));
+                $pointCollection = $section->samplingPoints;
+                $this->normalizeTimeInputs($sectionRequest, $pointCollection);
+                $data = $sectionRequest->validate($this->buildCheckRules($pointCollection));
+                $check = MicrobiologicalCheck::query()
+                    ->where('sampling_session_id', $session->id)
+                    ->where('monitoring_section_id', $section->id)
+                    ->first();
+
+                $this->ensureProductionPhaseCanBeAccessed($data, $section, $check);
+
+                if (! $check) {
+                    $check = MicrobiologicalCheck::query()->create([
+                        'monitoring_section_id' => $section->id,
+                        'sampling_session_id' => $session->id,
+                        'sampled_on' => $data['sampled_on'],
+                        'created_by_user_id' => $userId,
+                    ]);
+                }
+
+                $isReopening = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
+                if ($isReopening) {
+                    $this->reopenProductionPhase($check, $data, $userId);
+                    $this->recordProductionPhaseLog($check, $data, $userId, 'reopened');
+                } else {
+                    $this->persistCheck($check, $data, $pointCollection);
+                    $this->signProductionPhase($check, $data, $userId);
+                    $this->recordProductionPhaseLog($check, $data, $userId);
+                }
+
+                $firstCheckId = $firstCheckId ?: $check->id;
+            }
+
+            return $firstCheckId;
+        });
+
+        return redirect()->route('monitoraggi.index', array_filter([
+            'view' => 'nuovo',
+            'env' => $session->environment,
+            'sub' => $session->sub_environment,
+            'phase' => $phase,
+            'edit_check' => $firstCheckId,
+            'session' => $session->id,
+        ]))->with('status', 'Fase salvata per tutti i reparti della sessione.');
     }
 
     /**

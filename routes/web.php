@@ -33,6 +33,8 @@ Route::middleware(['auth', 'role:admin,operatore'])->group(function () {
 Route::middleware(['auth', 'role:operatore'])->group(function () {
     Route::put('/monitoraggi/sessions/{session}', [MonitoringController::class, 'updateSamplingSession'])
         ->name('monitoraggi.sessions.update');
+    Route::post('/monitoraggi/sessions/{session}/phase', [MonitoringController::class, 'updateSamplingSessionPhase'])
+        ->name('monitoraggi.sessions.phase.update');
     Route::post('/monitoraggi/{section}/checks', [MonitoringController::class, 'store'])
         ->name('monitoraggi.checks.store');
     Route::patch('/monitoraggi/{section}/checks/{check}', [MonitoringController::class, 'updateCheck'])

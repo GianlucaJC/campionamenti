@@ -153,6 +153,18 @@
             margin-bottom: 20px;
         }
 
+        .session-phase-actions {
+            position: sticky;
+            top: 10px;
+            z-index: 20;
+            margin: 14px 0;
+            padding: 10px 12px;
+            border: 1px solid #9ccfca;
+            border-radius: 8px;
+            background: #f3fbfa;
+            box-shadow: 0 3px 12px rgba(22, 92, 86, 0.16);
+        }
+
         .production-phase-locked {
             opacity: 0.62;
             pointer-events: none;
@@ -1163,6 +1175,33 @@
                                 @endforeach
                             </div>
 
+                            @if ($currentEnvironment !== 'acque')
+                                @php
+                                    $sessionCheck = $sessionChecks->first();
+                                    $isPhaseSigned = fn (string $phase) => $sessionChecks->every(
+                                        fn ($check) => filled($check->phaseStates->firstWhere('phase', $phase)?->signed_by_user_id)
+                                    );
+                                    $phaseStatus = ! $isPhaseSigned('sampling')
+                                        ? ['waiting-first-reading', 'In attesa prima lettura']
+                                        : (! $isPhaseSigned('reading_1')
+                                            ? ['waiting-first-reading', 'In attesa prima lettura']
+                                            : (! $isPhaseSigned('reading_2')
+                                                ? ['waiting-second-reading', 'In attesa seconda lettura']
+                                                : ['complete', 'Completo']));
+                                @endphp
+                                <div class="archive-item archive-item-sampled" style="margin-top:8px;">
+                                    <div class="archive-item-head">
+                                        <strong>Sessione di campionamento</strong>
+                                        <span class="badge">{{ $sessionChecks->sum('point_results_count') }} punti compilati</span>
+                                        <span class="archive-phase-status {{ $phaseStatus[0] }}">{{ $phaseStatus[1] }}</span>
+                                    </div>
+                                    <span class="hint">Operatore: {{ $sessionCheck->operator_name ?: ($sessionCheck->author?->name ?: '-') }}</span>
+                                    <span class="hint">Salvato il: {{ $sessionChecks->max('created_at')?->format('d-m-Y H:i') ?: '-' }}</span>
+                                    @if (! $sessionCheck->trashed())
+                                        <a class="archive-edit-button" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $sessionCheck->id, 'session' => $sessionCheck->sampling_session_id])) }}">Apri in modifica</a>
+                                    @endif
+                                </div>
+                            @else
                             @foreach ($sessionChecks as $check)
                                 @php
                                     $phaseStates = $check->phaseStates->keyBy('phase');
@@ -1311,6 +1350,7 @@
                                     @endif
                                 </div>
                             @endforeach
+                            @endif
                         </div>
                     @empty
                         <p class="hint">Nessun campionamento presente per l'ambiente selezionato.</p>
@@ -1613,6 +1653,15 @@
         @endif
 
         @if ($currentView === 'nuovo' || $currentView === 'gestione-punti')
+            @if (auth()->user()?->isOperatore() && $currentView === 'nuovo' && in_array($currentEnvironment, ['produzione', 'operatori', 'clean_room'], true) && $samplingSession)
+                <form id="save-session-phase" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form>
+                    @csrf
+                    <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
+                    <p class="hint">Salvataggio unico della fase per tutti i reparti della sessione.</p>
+                    <button type="submit">Salva {{ $productionPhases[$productionPhase] }}</button>
+                    <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }} per tutti</button>
+                </form>
+            @endif
             @forelse ($filteredSections as $section)
                 @php
                     $groupedPoints = collect();
@@ -1647,10 +1696,11 @@
                         ->pluck('sample_kind')
                         ->filter()
                         ->first() ?? $section->samplingPoints->pluck('sample_kind')->filter()->first();
-                    $isEditingSection = $editingCheck && (int) $editingCheck->monitoring_section_id === (int) $section->id;
-                    $headerCheck = $isEditingSection ? $editingCheck : ($samplingSession ? (object) $samplingSession->header : null);
-                    $editingPointResults = $isEditingSection ? $editingCheck->pointResults->keyBy('sampling_point_id') : collect();
-                    $phaseStates = $isEditingSection ? $editingCheck->phaseStates->keyBy('phase') : collect();
+                    $sectionCheck = $sessionChecksBySection->get($section->id);
+                    $isEditingSection = filled($sectionCheck);
+                    $headerCheck = $sectionCheck ?: ($samplingSession ? (object) $samplingSession->header : null);
+                    $editingPointResults = $sectionCheck ? $sectionCheck->pointResults->keyBy('sampling_point_id') : collect();
+                    $phaseStates = $sectionCheck ? $sectionCheck->phaseStates->keyBy('phase') : collect();
                     $activePhaseState = $phaseStates->get($productionPhase);
                     $phaseSignerId = $activePhaseState?->signed_by_user_id;
                     $phaseReopenedAt = $activePhaseState?->reopened_at;
@@ -1870,13 +1920,13 @@
                         @endif
 
                         @if ($currentEnvironment === 'clean_room' && auth()->user()?->isOperatore() && $currentView === 'nuovo')
-                            <form class="sampling-section-form" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
+                            <form class="sampling-section-form" data-batch-section-id="{{ $section->id }}" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $sectionCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
                                 @csrf
                                 @if ($isEditingSection)
                                     @method('PATCH')
                                 @endif
 
-                                <input type="hidden" name="sampling_session_id" value="{{ $isEditingSection ? $editingCheck->sampling_session_id : $samplingSessionId }}">
+                                <input type="hidden" name="sampling_session_id" value="{{ $isEditingSection ? $sectionCheck->sampling_session_id : $samplingSessionId }}">
 
                                 <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
 
@@ -1908,18 +1958,13 @@
                                             <input id="media_lot_{{ $section->id }}" type="text" name="media_lot" value="{{ old('media_lot', $headerCheck?->media_lot) }}" maxlength="120">
                                         </div>
                                     @endif
-                                        @if ($isEditingSection)
-                                            <div class="field" style="align-self: end;">
-                                                <button type="submit" name="save_header" value="1">Salva intestazione</button>
-                                            </div>
-                                        @endif
                                 </div>
 
                                     <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
                                         @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
                                             @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
                                             @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
-                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'clean_room', 'sub' => $currentSubEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null, 'session' => $samplingSessionId])) }}">{{ $phaseLabel }}</a>
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => 'clean_room', 'sub' => $currentSubEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $sectionCheck->id : null, 'session' => $samplingSessionId])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
@@ -1996,39 +2041,18 @@
 
                                 <div class="field @if ($productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;">
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
-                                    <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
+                                    <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $sectionCheck->notes : null) }}</textarea>
                                 </div>
 
-                                @if ($productionPhaseLocked)
-                                    <div class="actions">
-                                        @if ((int) $phaseSignerId === (int) auth()->id() && ! filled($phaseReopenedAt))
-                                            <div class="field" style="min-width: min(100%, 360px);">
-                                                <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
-                                                <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000">{{ old('reopening_reason') }}</textarea>
-                                            </div>
-                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $sectionProductionPhases[$productionPhase] }}</button>
-                                        @else
-                                            <p class="hint">Questa fase e firmata e bloccata. Solo l'operatore che l'ha firmata puo riaprirla indicando una motivazione.</p>
-                                        @endif
-                                    </div>
-                                @else
-                                    <div class="actions">
-                                        <p class="hint">Salvataggio puntuale per singola fase Clean room.</p>
-                                        <button type="submit">{{ $isEditingSection ? 'Aggiorna fase' : 'Salva fase' }}</button>
-                                        @if (! $phaseSigned || filled($phaseReopenedAt))
-                                            <button type="submit" name="sign_phase" value="1">Firma {{ $sectionProductionPhases[$productionPhase] }}</button>
-                                        @endif
-                                    </div>
-                                @endif
                             </form>
                         @elseif (auth()->user()?->isOperatore() && $currentView === 'nuovo')
-                            <form class="sampling-section-form" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $editingCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
+                            <form class="sampling-section-form" data-batch-section-id="{{ $section->id }}" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $sectionCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
                                 @csrf
                                 @if ($isEditingSection)
                                     @method('PATCH')
                                 @endif
 
-                                <input type="hidden" name="sampling_session_id" value="{{ $isEditingSection ? $editingCheck->sampling_session_id : $samplingSessionId }}">
+                                <input type="hidden" name="sampling_session_id" value="{{ $isEditingSection ? $sectionCheck->sampling_session_id : $samplingSessionId }}">
 
                                 @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
@@ -2073,35 +2097,35 @@
                                     @if ($currentEnvironment === 'acque')
                                         <div class="field" data-water-step-content="results">
                                             <label for="incubation_started_signature_{{ $section->id }}">Firma inizio incubazione</label>
-                                            <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', $isEditingSection ? $editingCheck->incubation_started_signature : null) }}" maxlength="120">
+                                            <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', $isEditingSection ? $sectionCheck->incubation_started_signature : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="incubation_finished_signature_{{ $section->id }}">Firma fine incubazione</label>
-                                            <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', $isEditingSection ? $editingCheck->incubation_finished_signature : null) }}" maxlength="120">
+                                            <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', $isEditingSection ? $sectionCheck->incubation_finished_signature : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="membrane_lot_{{ $section->id }}">Membrana filtrante lotto</label>
-                                            <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', $isEditingSection ? $editingCheck->membrane_lot : null) }}" maxlength="120">
+                                            <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', $isEditingSection ? $sectionCheck->membrane_lot : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="bottle_sterilization_lot_{{ $section->id }}">Lotto sterilizzazione flaconi</label>
-                                            <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', $isEditingSection ? $editingCheck->bottle_sterilization_lot : null) }}" maxlength="120">
+                                            <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', $isEditingSection ? $sectionCheck->bottle_sterilization_lot : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="r2a_agar_lot_{{ $section->id }}">R2A Agar Lotto</label>
-                                            <input id="r2a_agar_lot_{{ $section->id }}" type="text" name="r2a_agar_lot" value="{{ old('r2a_agar_lot', $isEditingSection ? $editingCheck->r2a_agar_lot : null) }}" maxlength="120">
+                                            <input id="r2a_agar_lot_{{ $section->id }}" type="text" name="r2a_agar_lot" value="{{ old('r2a_agar_lot', $isEditingSection ? $sectionCheck->r2a_agar_lot : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="coliform_agar_lot_{{ $section->id }}">Chromatic Coliform Agar ISO / TTC Lotto</label>
-                                            <input id="coliform_agar_lot_{{ $section->id }}" type="text" name="coliform_agar_lot" value="{{ old('coliform_agar_lot', $isEditingSection ? $editingCheck->coliform_agar_lot : null) }}" maxlength="120">
+                                            <input id="coliform_agar_lot_{{ $section->id }}" type="text" name="coliform_agar_lot" value="{{ old('coliform_agar_lot', $isEditingSection ? $sectionCheck->coliform_agar_lot : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="pseudomonas_cn_lot_{{ $section->id }}">Pseudomonas CN Agar Lotto</label>
-                                            <input id="pseudomonas_cn_lot_{{ $section->id }}" type="text" name="pseudomonas_cn_lot" value="{{ old('pseudomonas_cn_lot', $isEditingSection ? $editingCheck->pseudomonas_cn_lot : null) }}" maxlength="120">
+                                            <input id="pseudomonas_cn_lot_{{ $section->id }}" type="text" name="pseudomonas_cn_lot" value="{{ old('pseudomonas_cn_lot', $isEditingSection ? $sectionCheck->pseudomonas_cn_lot : null) }}" maxlength="120">
                                         </div>
                                         <div class="field" data-water-step-content="results">
                                             <label for="slanetz_bartley_lot_{{ $section->id }}">Slanetz and Bartley Medium lotto</label>
-                                            <input id="slanetz_bartley_lot_{{ $section->id }}" type="text" name="slanetz_bartley_lot" value="{{ old('slanetz_bartley_lot', $isEditingSection ? $editingCheck->slanetz_bartley_lot : null) }}" maxlength="120">
+                                            <input id="slanetz_bartley_lot_{{ $section->id }}" type="text" name="slanetz_bartley_lot" value="{{ old('slanetz_bartley_lot', $isEditingSection ? $sectionCheck->slanetz_bartley_lot : null) }}" maxlength="120">
                                         </div>
                                     @else
                                         <div class="field">
@@ -2111,11 +2135,6 @@
                                         <div class="field">
                                             <label for="swab_lot_{{ $section->id }}">Lotto provette/swab</label>
                                             <input id="swab_lot_{{ $section->id }}" type="text" name="swab_lot" value="{{ old('swab_lot', $headerCheck?->swab_lot) }}" maxlength="120">
-                                        </div>
-                                    @endif
-                                    @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $isEditingSection)
-                                        <div class="field" style="align-self: end;">
-                                            <button type="submit" name="save_header" value="1">Salva intestazione</button>
                                         </div>
                                     @endif
                                 </div>
@@ -2244,7 +2263,7 @@
                                         @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
                                             @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
                                             @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
-                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $editingCheck->id : null])) }}">{{ $phaseLabel }}</a>
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $sectionCheck->id : null, 'session' => $samplingSessionId])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
@@ -2469,28 +2488,13 @@
 
                                 <div class="field @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                     <label for="notes_{{ $section->id }}">Note sezione</label>
-                                    <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $editingCheck->notes : null) }}</textarea>
+                                    <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $sectionCheck->notes : null) }}</textarea>
                                 </div>
 
-                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked)
-                                    <div class="actions">
-                                        @if ((int) $phaseSignerId === (int) auth()->id() && ! filled($phaseReopenedAt))
-                                            <div class="field" style="min-width: min(100%, 360px);">
-                                                <label for="reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
-                                                <textarea id="reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000">{{ old('reopening_reason') }}</textarea>
-                                            </div>
-                                            <button type="submit" name="reopen_phase" value="1">Riapri {{ $sectionProductionPhases[$productionPhase] }}</button>
-                                        @else
-                                            <p class="hint">Questa fase e firmata e bloccata. Solo l'operatore che l'ha firmata puo riaprirla indicando una motivazione.</p>
-                                        @endif
-                                    </div>
-                                @else
+                                @if (! in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <div class="actions" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <p class="hint">Salvataggio puntuale per singola sezione.</p>
                                         <button type="submit">{{ $isEditingSection ? 'Aggiorna sezione' : 'Salva sezione' }}</button>
-                                        @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && (! $phaseSigned || filled($phaseReopenedAt)))
-                                            <button type="submit" name="sign_phase" value="1">Firma {{ $sectionProductionPhases[$productionPhase] }}</button>
-                                        @endif
                                     </div>
                                 @endif
                             </form>
@@ -2518,6 +2522,63 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var sessionPhaseForm = document.querySelector('[data-session-phase-form]');
+
+        if (sessionPhaseForm) {
+            sessionPhaseForm.addEventListener('submit', function (event) {
+                var sectionForms = Array.from(document.querySelectorAll('[data-batch-section-id]'));
+                var invalidForm = sectionForms.find(function (sectionForm) {
+                    return !sectionForm.reportValidity();
+                });
+
+                if (invalidForm) {
+                    event.preventDefault();
+                    invalidForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
+
+                event.preventDefault();
+                sessionPhaseForm.querySelectorAll('[data-generated-phase-input]').forEach(function (input) {
+                    input.remove();
+                });
+
+                if (event.submitter && event.submitter.name === 'sign_phase') {
+                    var signInput = document.createElement('input');
+                    signInput.type = 'hidden';
+                    signInput.name = 'sign_phase';
+                    signInput.value = '1';
+                    signInput.dataset.generatedPhaseInput = 'true';
+                    sessionPhaseForm.appendChild(signInput);
+                }
+
+                sectionForms.forEach(function (sectionForm) {
+                    var sectionId = sectionForm.dataset.batchSectionId;
+
+                    new FormData(sectionForm).forEach(function (value, name) {
+                        var pointMatch = name.match(/^points\[([^\]]+)\]\[([^\]]+)\]$/);
+                        var fieldName = name === 'notes'
+                            ? 'checks[' + sectionId + '][notes]'
+                            : pointMatch
+                                ? 'checks[' + sectionId + '][points][' + pointMatch[1] + '][' + pointMatch[2] + ']'
+                                : null;
+
+                        if (!fieldName) {
+                            return;
+                        }
+
+                        var input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = fieldName;
+                        input.value = value;
+                        input.dataset.generatedPhaseInput = 'true';
+                        sessionPhaseForm.appendChild(input);
+                    });
+                });
+
+                sessionPhaseForm.submit();
+            });
+        }
+
         var serverTime = document.body.dataset.serverTime;
 
         document.addEventListener('focusin', function (event) {
