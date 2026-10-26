@@ -3,16 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\MicrobiologicalCheck;
-use App\Models\MicrobiologicalCheckPoint;
 use App\Models\MicrobiologicalCheckPhaseLog;
 use App\Models\MicrobiologicalCheckPhaseState;
+use App\Models\MicrobiologicalCheckPoint;
 use App\Models\MonitoringDepartment;
 use App\Models\MonitoringSection;
-use App\Models\SamplingSession;
 use App\Models\SamplingPoint;
+use App\Models\SamplingSession;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -140,7 +141,7 @@ class MonitoringController extends Controller
                     return true;
                 }
 
-                return (($section->sub_environment ?: null) === $currentSubEnvironment);
+                return ($section->sub_environment ?: null) === $currentSubEnvironment;
             })
             ->values();
 
@@ -260,19 +261,37 @@ class MonitoringController extends Controller
                 $archiveQuery->whereDate('sampled_on', '<=', $archiveTo);
             }
 
-            $archiveChecks = $archiveQuery
-                ->paginate($archivePerPage)
-                ->withQueryString();
+            $archiveDateQuery = (clone $archiveQuery)
+                ->reorder()
+                ->select('sampled_on')
+                ->groupBy('sampled_on')
+                ->orderByDesc('sampled_on');
 
-            $archiveChecksBySession = $archiveChecks->getCollection()->groupBy(
-                fn (MicrobiologicalCheck $check) => $check->sampling_session_id ?: ('legacy-'.$check->id)
+            $archiveCurrentPage = LengthAwarePaginator::resolveCurrentPage();
+            $archiveDates = (clone $archiveDateQuery)
+                ->forPage($archiveCurrentPage, $archivePerPage)
+                ->pluck('sampled_on');
+            $archiveChecks = new LengthAwarePaginator(
+                $archiveDates,
+                (clone $archiveDateQuery)->get()->count(),
+                $archivePerPage,
+                $archiveCurrentPage,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
             );
+
+            $archiveChecksBySession = (clone $archiveQuery)
+                ->whereIn('sampled_on', $archiveDates)
+                ->get()
+                ->groupBy(fn (MicrobiologicalCheck $check) => (string) $check->sampled_on);
         }
 
         $editingCheckId = $request->query('edit_check');
         if ($currentView === 'nuovo' && filled($editingCheckId)) {
             $editingCheck = MicrobiologicalCheck::query()
-                ->with(['pointResults.readings', 'phaseStates'])
+                ->with(['pointResults.readings', 'phaseStates.signer:id,name'])
                 ->whereKey($editingCheckId)
                 ->first();
 
@@ -295,7 +314,7 @@ class MonitoringController extends Controller
         $sessionChecksBySection = collect();
         if ($currentView === 'nuovo' && $samplingSessionId && $samplingSession) {
             $sessionChecksBySection = MicrobiologicalCheck::query()
-                ->with(['pointResults.readings', 'phaseStates'])
+                ->with(['pointResults.readings', 'phaseStates.signer:id,name'])
                 ->where('sampling_session_id', $samplingSessionId)
                 ->get()
                 ->keyBy('monitoring_section_id');
@@ -391,7 +410,7 @@ class MonitoringController extends Controller
 
                 foreach ($trendResults as $result) {
                     $date = Carbon::parse($result->check->sampled_on)->toDateString();
-                    $pointLabel = ($result->point->section?->name ?: 'Sezione') . ' - ' . $result->point->title;
+                    $pointLabel = ($result->point->section?->name ?: 'Sezione').' - '.$result->point->title;
 
                     foreach ($result->readings as $reading) {
                         if ($reading->cfu_count === null) {
@@ -499,7 +518,7 @@ class MonitoringController extends Controller
         $checkId = DB::transaction(function () use ($data, $pointCollection, $section, $userId, $isPhasedEnvironment, $samplingSessionId): int {
             $check = MicrobiologicalCheck::query()->create([
                 'monitoring_section_id' => $section->id,
-            'sampling_session_id' => $samplingSessionId,
+                'sampling_session_id' => $samplingSessionId,
                 'sampled_on' => $data['sampled_on'],
                 'created_by_user_id' => $userId,
             ]);
@@ -580,8 +599,11 @@ class MonitoringController extends Controller
             'entry_phase' => ['required', 'regex:/^(sampling|reading_[1-9][0-9]*)$/'],
             'checks' => ['required', 'array'],
             'sign_phase' => ['nullable', 'boolean'],
+            'reopen_phase' => ['nullable', 'boolean'],
+            'reopening_reason' => ['required_if:reopen_phase,1', 'nullable', 'string', 'max:1000'],
         ])['entry_phase'];
         $checksInput = $request->input('checks');
+        $isReopening = $request->boolean('reopen_phase');
 
         $sections = MonitoringSection::query()
             ->where('is_active', true)
@@ -598,6 +620,43 @@ class MonitoringController extends Controller
             }])
             ->orderBy('sort_order')
             ->get();
+
+        $readingNumber = $this->readingNumber($phase);
+        if ($readingNumber) {
+            $sections = $sections->filter(
+                fn (MonitoringSection $section) => $readingNumber <= max(1, (int) $section->departments->max('readings_count'))
+            )->values();
+        }
+
+        $lockedChecks = MicrobiologicalCheck::query()
+            ->where('sampling_session_id', $session->id)
+            ->whereHas('phaseStates', function ($query) use ($phase): void {
+                $query
+                    ->where('phase', $phase)
+                    ->whereNotNull('signed_by_user_id')
+                    ->whereNull('reopened_at');
+            })
+            ->with(['phaseStates' => function ($query) use ($phase): void {
+                $query->where('phase', $phase);
+            }])
+            ->get();
+
+        $lockedSectionIds = $lockedChecks->pluck('monitoring_section_id');
+        $reopenableSectionIds = $lockedChecks
+            ->filter(fn (MicrobiologicalCheck $check) => (int) $check->phaseStates->first()?->signed_by_user_id === (int) $request->user()->id)
+            ->pluck('monitoring_section_id');
+
+        $sections = $isReopening
+            ? $sections->filter(fn (MonitoringSection $section) => $reopenableSectionIds->contains($section->id))->values()
+            : $sections->reject(fn (MonitoringSection $section) => $lockedSectionIds->contains($section->id))->values();
+
+        if ($sections->isEmpty()) {
+            return redirect()->back()->withErrors([
+                'entry_phase' => $isReopening
+                    ? 'Non ci sono sezioni firmate da te da riaprire per la fase selezionata.'
+                    : 'La fase selezionata è già firmata per tutte le sezioni della sessione. Riapri la sezione da modificare.',
+            ]);
+        }
 
         foreach ($sections as $section) {
             if (! array_key_exists($section->id, $checksInput)) {
@@ -618,6 +677,8 @@ class MonitoringController extends Controller
                         'sampling_session_id' => $session->id,
                         'entry_phase' => $phase,
                         'sign_phase' => $request->boolean('sign_phase'),
+                        'reopen_phase' => $isReopening,
+                        'reopening_reason' => $request->input('reopening_reason'),
                     ],
                     $session->header
                 ));
@@ -1053,8 +1114,7 @@ class MonitoringController extends Controller
         array $data,
         MonitoringSection $section,
         ?MicrobiologicalCheck $check = null
-    ): void
-    {
+    ): void {
         $phase = $data['entry_phase'] ?? null;
 
         if (! $phase) {
@@ -2091,6 +2151,7 @@ class MonitoringController extends Controller
 
         if ($position === 'before') {
             $previous = $index > 0 ? (float) $points[$index - 1]->sort_order : $anchor - 10;
+
             return round(($previous + $anchor) / 2, 3);
         }
 

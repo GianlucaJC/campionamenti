@@ -636,6 +636,11 @@
             padding: 10px;
         }
 
+        .archive-pagination svg {
+            width: 20px;
+            height: 20px;
+        }
+
         .archive-date-group {
             border: 1px solid #ddd0c1;
             border-radius: 12px;
@@ -1658,8 +1663,13 @@
                     @csrf
                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
                     <p class="hint">Salvataggio unico della fase per tutti i reparti della sessione.</p>
-                    <button type="submit">Salva {{ $productionPhases[$productionPhase] }}</button>
-                    <button type="submit" name="sign_phase" value="1">Firma {{ $productionPhases[$productionPhase] }} per tutti</button>
+                    <div class="field" data-session-reopen-reason hidden>
+                        <label for="session_reopening_reason">Motivazione riapertura</label>
+                        <textarea id="session_reopening_reason" name="reopening_reason" maxlength="1000"></textarea>
+                    </div>
+                    <button type="submit" data-session-save>Salva {{ $productionPhases[$productionPhase] }}</button>
+                    <button type="submit" name="sign_phase" value="1" data-session-sign>Firma {{ $productionPhases[$productionPhase] }} per tutti</button>
+                    <button type="submit" name="reopen_phase" value="1" data-session-reopen hidden>Riapri {{ $productionPhases[$productionPhase] }} per tutti</button>
                 </form>
             @endif
             @forelse ($filteredSections as $section)
@@ -1686,6 +1696,7 @@
                         $sectionProductionPhases["reading_{$readingNumber}"] = "Lettura {$readingNumber}";
                     }
                     $currentReadingNumber = preg_match('/^reading_([1-9][0-9]*)$/', $productionPhase, $readingMatches) ? (int) $readingMatches[1] : null;
+                    $sectionSupportsProductionPhase = ! $currentReadingNumber || $currentReadingNumber <= $sectionMaximumReadings;
                     if ($currentReadingNumber) {
                         $groupedPoints = $groupedPoints->map(fn ($points) => $points->filter(
                             fn ($point) => $currentReadingNumber <= (int) ($point->department?->readings_count ?? 2)
@@ -1705,6 +1716,13 @@
                     $phaseSignerId = $activePhaseState?->signed_by_user_id;
                     $phaseReopenedAt = $activePhaseState?->reopened_at;
                     $phaseSigned = filled($phaseSignerId);
+                    $productionPhaseReopenable = $isEditingSection && $phaseSigned && ! filled($phaseReopenedAt) && (int) $phaseSignerId === (int) auth()->id();
+                    $phaseSignerInitials = $activePhaseState?->signer?->name
+                        ? collect(preg_split('/\s+/', trim($activePhaseState->signer->name)))
+                            ->filter()
+                            ->map(fn (string $namePart) => strtoupper(substr($namePart, 0, 1)))
+                            ->join('')
+                        : null;
                     $productionPhaseLocked = $isEditingSection && $phaseSigned && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id());
                 @endphp
                 <details class="section" @if($isEditingSection) open @endif>
@@ -1920,7 +1938,7 @@
                         @endif
 
                         @if ($currentEnvironment === 'clean_room' && auth()->user()?->isOperatore() && $currentView === 'nuovo')
-                            <form class="sampling-section-form" data-batch-section-id="{{ $section->id }}" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $sectionCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
+                            <form class="sampling-section-form" @if ($sectionSupportsProductionPhase && ! $productionPhaseLocked) data-batch-section-id="{{ $section->id }}" @endif @if ($sectionSupportsProductionPhase && $productionPhaseReopenable) data-batch-reopen-section-id="{{ $section->id }}" @endif action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $sectionCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
                                 @csrf
                                 @if ($isEditingSection)
                                     @method('PATCH')
@@ -2044,9 +2062,13 @@
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $sectionCheck->notes : null) }}</textarea>
                                 </div>
 
+                                @if ($productionPhaseLocked)
+                                    <p class="hint" style="margin-top: 12px;">Questa fase e firmata e bloccata.{{ $productionPhaseReopenable ? ' Usa il comando di riapertura in alto.' : " Solo l'operatore che l'ha firmata puo riaprirla." }}</p>
+                                @endif
+
                             </form>
                         @elseif (auth()->user()?->isOperatore() && $currentView === 'nuovo')
-                            <form class="sampling-section-form" data-batch-section-id="{{ $section->id }}" action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $sectionCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
+                            <form class="sampling-section-form" @if ($sectionSupportsProductionPhase && ! $productionPhaseLocked) data-batch-section-id="{{ $section->id }}" @endif @if ($sectionSupportsProductionPhase && $productionPhaseReopenable) data-batch-reopen-section-id="{{ $section->id }}" @endif action="{{ $isEditingSection ? route('monitoraggi.checks.update', [$section, $sectionCheck]) : route('monitoraggi.checks.store', $section) }}" method="POST">
                                 @csrf
                                 @if ($isEditingSection)
                                     @method('PATCH')
@@ -2491,6 +2513,14 @@
                                     <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $sectionCheck->notes : null) }}</textarea>
                                 </div>
 
+                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked)
+                                    <p class="hint" style="margin-top: 12px;">Questa fase e firmata e bloccata.{{ $productionPhaseReopenable ? ' Usa il comando di riapertura in alto.' : " Solo l'operatore che l'ha firmata puo riaprirla." }}</p>
+                                @endif
+
+                                @if ($phaseSignerInitials)
+                                    <p class="hint" style="margin: 12px 0 0;">Firmata da: {{ $phaseSignerInitials }}</p>
+                                @endif
+
                                 @if (! in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <div class="actions" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
                                         <p class="hint">Salvataggio puntuale per singola sezione.</p>
@@ -2525,8 +2555,44 @@
         var sessionPhaseForm = document.querySelector('[data-session-phase-form]');
 
         if (sessionPhaseForm) {
+            var editableSectionForms = document.querySelectorAll('[data-batch-section-id]');
+            var reopenableSectionForms = document.querySelectorAll('[data-batch-reopen-section-id]');
+            var saveButton = sessionPhaseForm.querySelector('[data-session-save]');
+            var signButton = sessionPhaseForm.querySelector('[data-session-sign]');
+            var reopenButton = sessionPhaseForm.querySelector('[data-session-reopen]');
+            var reopenReasonField = sessionPhaseForm.querySelector('[data-session-reopen-reason]');
+
+            if (! editableSectionForms.length) {
+                saveButton.hidden = true;
+                signButton.hidden = true;
+            }
+
+            if (reopenableSectionForms.length) {
+                reopenButton.hidden = false;
+                reopenReasonField.hidden = false;
+            }
+
+            if (! editableSectionForms.length && ! reopenableSectionForms.length) {
+                sessionPhaseForm.querySelector('.hint').textContent = 'La fase selezionata è già firmata per tutte le sezioni. Non hai sezioni che puoi riaprire.';
+            }
+
             sessionPhaseForm.addEventListener('submit', function (event) {
-                var sectionForms = Array.from(document.querySelectorAll('[data-batch-section-id]'));
+                var isReopening = event.submitter && event.submitter.name === 'reopen_phase';
+                var sectionForms = Array.from(document.querySelectorAll(
+                    isReopening ? '[data-batch-reopen-section-id]' : '[data-batch-section-id]'
+                ));
+
+                if (isReopening) {
+                    var reopeningReason = reopenReasonField.querySelector('textarea');
+
+                    if (! reopeningReason.value.trim()) {
+                        event.preventDefault();
+                        reopeningReason.focus();
+                        reopeningReason.reportValidity();
+                        return;
+                    }
+                }
+
                 var invalidForm = sectionForms.find(function (sectionForm) {
                     return !sectionForm.reportValidity();
                 });
@@ -2549,6 +2615,15 @@
                     signInput.value = '1';
                     signInput.dataset.generatedPhaseInput = 'true';
                     sessionPhaseForm.appendChild(signInput);
+                }
+
+                if (isReopening) {
+                    var reopenInput = document.createElement('input');
+                    reopenInput.type = 'hidden';
+                    reopenInput.name = 'reopen_phase';
+                    reopenInput.value = '1';
+                    reopenInput.dataset.generatedPhaseInput = 'true';
+                    sessionPhaseForm.appendChild(reopenInput);
                 }
 
                 sectionForms.forEach(function (sectionForm) {
