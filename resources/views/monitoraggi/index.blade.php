@@ -1156,7 +1156,7 @@
                     </div>
 
                     <div class="actions" style="margin-top:0;">
-                        <p class="hint">Intervallo date facoltativo. Vuoto = tutte le date disponibili.@if ($archiveReadingsOnly) Filtro letture attivo: campionamento firmato.@endif</p>
+                        <p class="hint">Intervallo date facoltativo. Vuoto = tutte le date disponibili.@if ($archiveReadingsOnly) Filtro letture attivo: campionamenti con almeno una firma mancante.@endif</p>
                         <a class="menu-link" href="{{ route('monitoraggi.index', array_filter(['view' => 'archivio', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment])) }}">Reset filtri</a>
                     </div>
                 </form>

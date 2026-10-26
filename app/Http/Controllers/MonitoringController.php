@@ -229,18 +229,26 @@ class MonitoringController extends Controller
 
             if ($archiveReadingsOnly) {
                 $archiveQuery->where(function ($query): void {
-                    $query
-                        ->whereHas('phaseStates', function ($phaseQuery): void {
-                            $phaseQuery
-                                ->where('phase', 'sampling')
-                                ->where(function ($signedQuery): void {
-                                    $signedQuery
-                                        ->whereNotNull('signed_at')
-                                        ->orWhereNotNull('signed_by_user_id');
+                    foreach ([
+                        ['sampling', 'sampling_completed_signature', 'sampling_completed_by_user_id'],
+                        ['reading_1', 'first_reading_completed_signature', 'first_reading_completed_by_user_id'],
+                        ['reading_2', 'second_reading_completed_signature', 'second_reading_completed_by_user_id'],
+                    ] as [$phase, $signatureColumn, $signerColumn]) {
+                        $query->orWhere(function ($missingPhaseQuery) use ($phase, $signatureColumn, $signerColumn): void {
+                            $missingPhaseQuery
+                                ->whereNull($signatureColumn)
+                                ->whereNull($signerColumn)
+                                ->whereDoesntHave('phaseStates', function ($phaseQuery) use ($phase): void {
+                                    $phaseQuery
+                                        ->where('phase', $phase)
+                                        ->where(function ($signedQuery): void {
+                                            $signedQuery
+                                                ->whereNotNull('signed_at')
+                                                ->orWhereNotNull('signed_by_user_id');
+                                        });
                                 });
-                        })
-                        ->orWhereNotNull('sampling_completed_signature')
-                        ->orWhereNotNull('sampling_completed_by_user_id');
+                        });
+                    }
                 });
             }
 
