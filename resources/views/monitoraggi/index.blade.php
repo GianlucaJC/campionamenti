@@ -1082,7 +1082,14 @@
         @endif
 
         @if ($errors->any())
-            <div class="errors">Verifica i dati inseriti: alcuni campi non sono validi.</div>
+            <div class="errors" role="alert">
+                Verifica i dati inseriti: alcuni campi non sono validi.
+                <ul>
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
         @endif
     </header>
 
@@ -1100,14 +1107,21 @@
                     <input type="hidden" name="sampling_session_id" value="{{ $samplingSessionId }}">
                     <input type="hidden" name="environment" value="{{ $currentEnvironment }}">
                     <input type="hidden" name="sub_environment" value="{{ $currentSubEnvironment }}">
+                    <fieldset @disabled($samplingSessionHeaderLocked) style="display: contents;">
                     <div class="field"><label for="session_sampled_on">Data prelievo</label><input id="session_sampled_on" type="date" name="sampled_on" value="{{ old('sampled_on', data_get($sessionHeader, 'sampled_on', now()->toDateString())) }}" required></div>
                     <div class="field"><label for="session_incubation_started_on">Inizio incubazione</label><input id="session_incubation_started_on" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', data_get($sessionHeader, 'incubation_started_on')) }}"></div>
                     <div class="field"><label for="session_operator_name">Firma campionatore</label><input id="session_operator_name" type="text" name="operator_name" value="{{ old('operator_name', data_get($sessionHeader, 'operator_name', auth()->user()?->name)) }}" maxlength="120"></div>
                     <div class="field"><label for="session_cq_operator_name">Operatore CQ</label><input id="session_cq_operator_name" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', data_get($sessionHeader, 'cq_operator_name')) }}" maxlength="120"></div>
                     <div class="field"><label for="session_media_lot">Lotto piastre</label><input id="session_media_lot" type="text" name="media_lot" value="{{ old('media_lot', data_get($sessionHeader, 'media_lot')) }}" maxlength="120"></div>
                     <div class="field"><label for="session_swab_lot">Lotto provette/swab</label><input id="session_swab_lot" type="text" name="swab_lot" value="{{ old('swab_lot', data_get($sessionHeader, 'swab_lot')) }}" maxlength="120"></div>
-                    <div class="field" style="align-self:end;"><button type="submit">Salva intestazione</button></div>
+                    @if (! $samplingSessionHeaderLocked)
+                        <div class="field" style="align-self:end;"><button type="submit">Salva intestazione</button></div>
+                    @endif
+                    </fieldset>
                 </form>
+                @if ($samplingSessionHeaderLocked)
+                    <p class="hint">Intestazione bloccata dopo la firma del campionamento.</p>
+                @endif
             </article>
         @endif
 
@@ -1167,18 +1181,19 @@
                 </form>
 
                 <div class="archive-grid">
-                    @forelse ($archiveChecksBySession as $sessionChecks)
+                    @forelse ($archiveChecksBySession as $dateChecks)
                         <div class="archive-date-group">
                             <div class="archive-date-head">
-                                <h3 class="archive-date-title">{{ \Carbon\Carbon::parse($sessionChecks->max('sampled_on'))->format('d-m-Y') }}</h3>
-                                <span class="hint">{{ $sessionChecks->count() }} sezioni campionate · {{ $sessionChecks->sum('point_results_count') }} punti compilati</span>
+                                <h3 class="archive-date-title">{{ \Carbon\Carbon::parse($dateChecks->max('sampled_on'))->format('d-m-Y') }}</h3>
+                                <span class="hint">{{ $dateChecks->count() }} sezioni campionate · {{ $dateChecks->sum('point_results_count') }} punti compilati</span>
                             </div>
 
-                            <div class="archive-section-tags">
-                                @foreach ($sessionChecks as $sessionCheck)
-                                    <span class="archive-section-tag">{{ $sessionCheck->section?->name ?? 'Sezione rimossa' }}: {{ $sessionCheck->point_results_count }} punti</span>
-                                @endforeach
-                            </div>
+                            @php
+                                $dateSessions = $currentEnvironment === 'acque'
+                                    ? collect([$dateChecks])
+                                    : $dateChecks->groupBy(fn ($check) => $check->sampling_session_id ?: 'legacy-'.$check->id);
+                            @endphp
+                            @foreach ($dateSessions as $sessionChecks)
 
                             @if ($currentEnvironment !== 'acque')
                                 @php
@@ -1196,9 +1211,15 @@
                                 @endphp
                                 <div class="archive-item archive-item-sampled" style="margin-top:8px;">
                                     <div class="archive-item-head">
-                                        <strong>Sessione di campionamento</strong>
+                                        <strong>{{ $sessionCheck->sampling_session_id ? 'Sessione di campionamento' : 'Campionamento storico' }}</strong>
                                         <span class="badge">{{ $sessionChecks->sum('point_results_count') }} punti compilati</span>
                                         <span class="archive-phase-status {{ $phaseStatus[0] }}">{{ $phaseStatus[1] }}</span>
+                                    </div>
+                                    <span class="hint">{{ $sessionCheck->sampling_session_id ? 'ID sessione: '.$sessionCheck->sampling_session_id : 'ID campionamento: '.$sessionCheck->id }}</span>
+                                    <div class="archive-section-tags">
+                                        @foreach ($sessionChecks as $sectionCheck)
+                                            <span class="archive-section-tag">{{ $sectionCheck->section?->name ?? 'Sezione rimossa' }}: {{ $sectionCheck->point_results_count }} punti</span>
+                                        @endforeach
                                     </div>
                                     <span class="hint">Operatore: {{ $sessionCheck->operator_name ?: ($sessionCheck->author?->name ?: '-') }}</span>
                                     <span class="hint">Salvato il: {{ $sessionChecks->max('created_at')?->format('d-m-Y H:i') ?: '-' }}</span>
@@ -1207,6 +1228,11 @@
                                     @endif
                                 </div>
                             @else
+                            <div class="archive-section-tags">
+                                @foreach ($sessionChecks as $sessionCheck)
+                                    <span class="archive-section-tag">{{ $sessionCheck->section?->name ?? 'Sezione rimossa' }}: {{ $sessionCheck->point_results_count }} punti</span>
+                                @endforeach
+                            </div>
                             @foreach ($sessionChecks as $check)
                                 @php
                                     $phaseStates = $check->phaseStates->keyBy('phase');
@@ -1356,6 +1382,7 @@
                                 </div>
                             @endforeach
                             @endif
+                            @endforeach
                         </div>
                     @empty
                         <p class="hint">Nessun campionamento presente per l'ambiente selezionato.</p>
@@ -1711,6 +1738,11 @@
                     $isEditingSection = filled($sectionCheck);
                     $headerCheck = $sectionCheck ?: ($samplingSession ? (object) $samplingSession->header : null);
                     $editingPointResults = $sectionCheck ? $sectionCheck->pointResults->keyBy('sampling_point_id') : collect();
+                    if ($currentReadingNumber) {
+                        $groupedPoints = $groupedPoints->map(fn ($points) => $points->filter(
+                            fn ($point) => $editingPointResults->has($point->id)
+                        ))->filter(fn ($points) => $points->isNotEmpty());
+                    }
                     $phaseStates = $sectionCheck ? $sectionCheck->phaseStates->keyBy('phase') : collect();
                     $activePhaseState = $phaseStates->get($productionPhase);
                     $phaseSignerId = $activePhaseState?->signed_by_user_id;
@@ -2293,6 +2325,9 @@
                                     </div>
                                 @endif
 
+                                @if ($currentReadingNumber && $groupedPoints->isEmpty())
+                                    <p class="hint">Non risultano campionamenti effettuati.</p>
+                                @else
                                 <div class="table-scroll @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif">
                                     <table>
                                         <thead>
@@ -2333,7 +2368,11 @@
                                                         <th>Lotto prodotto</th>
                                                     @endif
                                                 @elseif ($currentReadingNumber)
+                                                    @if ($sectionSampleKind === 'surface_swab')
+                                                        <th>Esito lettura {{ $currentReadingNumber }}</th>
+                                                    @else
                                                     <th>{{ $currentEnvironment === 'produzione' ? 'UFC/m3' : 'UFC/piastra' }} (lettura {{ $currentReadingNumber }})</th>
+                                                    @endif
                                                 @else
                                                     <th>Valore lettura</th>
                                                 @endif
@@ -2450,6 +2489,14 @@
                                                                     @endif
                                                                 </td>
                                                             @endif
+                                                        @elseif ($currentReadingNumber && $point->sample_kind === 'surface_swab')
+                                                            <td>
+                                                                <select name="points[{{ $point->id }}][reading_growth_result]">
+                                                                    <option value="">-</option>
+                                                                    <option value="growth" @selected(old("points.{$point->id}.reading_growth_result", $pointReading?->growth_result) === 'growth')>Crescita</option>
+                                                                    <option value="no_growth" @selected(old("points.{$point->id}.reading_growth_result", $pointReading?->growth_result) === 'no_growth')>Non crescita</option>
+                                                                </select>
+                                                            </td>
                                                         @elseif ($currentReadingNumber)
                                                             <td>
                                                                 <input type="number" min="0" name="points[{{ $point->id }}][reading_cfu_count]" value="{{ old("points.{$point->id}.reading_cfu_count", $pointReading?->cfu_count) }}">
@@ -2506,6 +2553,7 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                @endif
                                 @endif
 
                                 <div class="field @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
@@ -2627,7 +2675,9 @@
                 }
 
                 sectionForms.forEach(function (sectionForm) {
-                    var sectionId = sectionForm.dataset.batchSectionId;
+                    var sectionId = isReopening
+                        ? sectionForm.dataset.batchReopenSectionId
+                        : sectionForm.dataset.batchSectionId;
 
                     new FormData(sectionForm).forEach(function (value, name) {
                         var pointMatch = name.match(/^points\[([^\]]+)\]\[([^\]]+)\]$/);

@@ -319,6 +319,8 @@ class MonitoringController extends Controller
                 ->get()
                 ->keyBy('monitoring_section_id');
         }
+        $samplingSessionHeaderLocked = $samplingSessionId
+            && $this->samplingSessionHeaderIsLocked($samplingSessionId);
 
         $trendEnvironments = collect($request->query('trend_environments', [$currentEnvironment]))
             ->filter(fn ($environment) => is_string($environment) && array_key_exists($environment, $environmentLabels))
@@ -478,6 +480,7 @@ class MonitoringController extends Controller
             'sessionChecksBySection' => $sessionChecksBySection,
             'samplingSessionId' => $samplingSessionId,
             'samplingSession' => $samplingSession,
+            'samplingSessionHeaderLocked' => $samplingSessionHeaderLocked,
             'trendEnvironments' => $trendEnvironments,
             'trendFrom' => $trendFrom,
             'trendTo' => $trendTo,
@@ -557,6 +560,12 @@ class MonitoringController extends Controller
 
         if ($data['sampling_session_id'] !== $session) {
             abort(404);
+        }
+
+        if ($this->samplingSessionHeaderIsLocked($session)) {
+            return redirect()->back()->withErrors([
+                'sampling_session_id' => 'L’intestazione non puo essere modificata dopo la firma del campionamento.',
+            ]);
         }
 
         $environment = (string) $request->input('environment');
@@ -667,7 +676,7 @@ class MonitoringController extends Controller
         }
 
         $userId = (int) Auth::id();
-        $firstCheckId = DB::transaction(function () use ($sections, $checksInput, $session, $phase, $request, $userId): int {
+        $firstCheckId = DB::transaction(function () use ($sections, $checksInput, $session, $phase, $request, $userId, $isReopening): int {
             $firstCheckId = 0;
 
             foreach ($sections as $section) {
@@ -701,8 +710,8 @@ class MonitoringController extends Controller
                     ]);
                 }
 
-                $isReopening = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
-                if ($isReopening) {
+                $shouldReopenPhase = $this->ensureProductionPhaseCanBeWritten($data, $check, $userId);
+                if ($shouldReopenPhase) {
                     $this->reopenProductionPhase($check, $data, $userId);
                     $this->recordProductionPhaseLog($check, $data, $userId, 'reopened');
                 } else {
@@ -1327,6 +1336,10 @@ class MonitoringController extends Controller
             /** @var MicrobiologicalCheckPoint|null $existingResult */
             $existingResult = $existingResults->get($point->id);
 
+            if ($readingNumber && ! $existingResult) {
+                continue;
+            }
+
             if (! $hasValue) {
                 if ($existingResult && empty($data['entry_phase'])) {
                     $existingResult->delete();
@@ -1457,6 +1470,19 @@ class MonitoringController extends Controller
         }
 
         return $readingNumber === 1 ? 'sampling' : 'reading_'.($readingNumber - 1);
+    }
+
+    private function samplingSessionHeaderIsLocked(string $sessionId): bool
+    {
+        return MicrobiologicalCheck::query()
+            ->where('sampling_session_id', $sessionId)
+            ->whereHas('phaseStates', function ($query): void {
+                $query
+                    ->where('phase', 'sampling')
+                    ->whereNotNull('signed_by_user_id')
+                    ->whereNull('reopened_at');
+            })
+            ->exists();
     }
 
     private function readingNumber(?string $phase): ?int
