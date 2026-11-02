@@ -1516,7 +1516,7 @@
                         @endif
                         <div class="department-grid">
                             <div class="field">
-                                <label for="new_section_name">Nome sezione</label>
+                                <label for="new_section_name">Nome reparto</label>
                                 <input id="new_section_name" type="text" name="name" maxlength="255" required placeholder="es. Reparto piastre">
                             </div>
                             <div class="field">
@@ -1537,7 +1537,7 @@
                                 @method('PATCH')
 
                                 <div class="field">
-                                    <label for="section_name_{{ $section->id }}">Nome sezione</label>
+                                    <label for="section_name_{{ $section->id }}">Nome reparto</label>
                                     <input id="section_name_{{ $section->id }}" type="text" name="name" maxlength="255" value="{{ $section->name }}" required>
                                 </div>
 
@@ -1604,11 +1604,11 @@
                                         @csrf
                                         <div class="department-grid">
                                             <div class="field">
-                                                <label for="new_department_name_global_{{ $section->id }}">Nome tipo di punto</label>
+                                                <label for="new_department_name_global_{{ $section->id }}">Tipo di campionamento</label>
                                                 <input id="new_department_name_global_{{ $section->id }}" type="text" name="name" maxlength="120" required placeholder="es. Laminar flow">
                                             </div>
                                             <div class="field">
-                                                <label for="new_department_code_global_{{ $section->id }}">Codice tipo di punto (opzionale)</label>
+                                                <label for="new_department_code_global_{{ $section->id }}">Codice tipo di campionamento (opzionale)</label>
                                                 <input id="new_department_code_global_{{ $section->id }}" type="text" name="code" maxlength="50" placeholder="es. laminar">
                                             </div>
                                             <div class="field">
@@ -1629,7 +1629,7 @@
                                                 @method('PATCH')
 
                                                 <div class="field">
-                                                    <label for="department_name_global_{{ $section->id }}_{{ $department->id }}">Nome tipo di punto</label>
+                                                    <label for="department_name_global_{{ $section->id }}_{{ $department->id }}">Tipo di campionamento</label>
                                                     <input id="department_name_global_{{ $section->id }}_{{ $department->id }}" type="text" name="name" maxlength="120" value="{{ $department->name }}" required @disabled($department->trashed())>
                                                 </div>
 
@@ -1715,7 +1715,7 @@
                         ->filter(fn ($point) => ! $section->departments->contains('id', $point->monitoring_department_id));
 
                     if ($unassignedPoints->isNotEmpty()) {
-                        $groupedPoints->put('Senza reparto', $unassignedPoints);
+                        $groupedPoints->put('Senza tipo di campionamento', $unassignedPoints);
                     }
                     $sectionMaximumReadings = max(1, (int) $section->departments->max('readings_count'));
                     $sectionProductionPhases = ['sampling' => 'Fase campionamento'];
@@ -1788,9 +1788,9 @@
                                                 <input id="new_title_{{ $section->id }}" type="text" name="title" maxlength="255" required placeholder="Nuovo punto campionamento">
                                             </div>
                                             <div class="field">
-                                                <label for="new_department_{{ $section->id }}">Reparto</label>
+                                                <label for="new_department_{{ $section->id }}">Tipo di campionamento</label>
                                                 <select id="new_department_{{ $section->id }}" name="monitoring_department_id" data-department-select data-section-id="{{ $section->id }}">
-                                                    <option value="">Senza reparto</option>
+                                                    <option value="">Senza tipo di campionamento</option>
                                                     @foreach ($section->departments as $department)
                                                         @if ($department->is_active)
                                                             <option value="{{ $department->id }}">{{ $department->name }}</option>
@@ -1800,10 +1800,10 @@
                                             </div>
                                             <div class="field">
                                                 <label for="new_area_{{ $section->id }}">Area dettagliata (opzionale)</label>
-                                                <input id="new_area_{{ $section->id }}" type="text" name="area_label" maxlength="255" placeholder="es. Reparto test">
+                                                <input id="new_area_{{ $section->id }}" type="text" name="area_label" maxlength="255" placeholder="es. {{ $section->name }}">
                                             </div>
                                             <div class="field">
-                                                <label for="new_kind_{{ $section->id }}">Tipo campionamento</label>
+                                                <label for="new_kind_{{ $section->id }}">Tipologia specifica</label>
                                                 <select id="new_kind_{{ $section->id }}" name="sample_kind" data-sample-kind-select>
                                                     <option value="air_passive">Aria passiva</option>
                                                     <option value="air_active">Aria attiva</option>
@@ -1851,7 +1851,7 @@
                                                 <select id="new_anchor_{{ $section->id }}" name="anchor_point_id" data-anchor-select data-section-id="{{ $section->id }}">
                                                     <option value="">Nessuno (usa in fondo)</option>
                                                     @foreach ($section->samplingPoints->where('is_active', true) as $point)
-                                                        <option value="{{ $point->id }}" data-department-id="{{ $point->monitoring_department_id ?? '' }}">{{ $point->department?->name ?: 'Senza reparto' }}: {{ $point->title }} {{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</option>
+                                                        <option value="{{ $point->id }}" data-department-id="{{ $point->monitoring_department_id ?? '' }}">{{ $point->department?->name ?: 'Senza tipo di campionamento' }}: {{ $point->title }} {{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</option>
                                                     @endforeach
                                                 </select>
                                             </div>
@@ -1879,9 +1879,9 @@
                                                 </div>
 
                                                 <div class="field">
-                                                    <label for="point_department_{{ $section->id }}_{{ $point->id }}">Reparto</label>
+                                                    <label for="point_department_{{ $section->id }}_{{ $point->id }}">Tipo di campionamento</label>
                                                     <select id="point_department_{{ $section->id }}_{{ $point->id }}" name="monitoring_department_id">
-                                                        <option value="">Senza reparto</option>
+                                                        <option value="">Senza tipo di campionamento</option>
                                                         @foreach ($section->departments as $department)
                                                             <option value="{{ $department->id }}" @selected((int) $point->monitoring_department_id === (int) $department->id)>
                                                                 {{ $department->name }}@if (! $department->is_active) (inattivo) @endif
@@ -2028,7 +2028,6 @@
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Locale / macchina</th>
-                                                <th>Reparto</th>
                                                 <th>Grado</th>
                                                 <th>Ora apertura</th>
                                                 <th>Ora chiusura</th>
@@ -2037,22 +2036,17 @@
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Locale / macchina</th>
-                                                <th>Reparto</th>
                                                 <th>Grado</th>
                                                 <th>Ora campionamento</th>
                                             </tr>
                                         @elseif ($sectionSampleKind === 'surface_swab')
-                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>Lettura {{ $currentReadingNumber }}</th></tr>
+                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Grado</th><th>Lettura {{ $currentReadingNumber }}</th></tr>
                                         @else
-                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Reparto</th><th>Grado</th><th>UFC lettura {{ $currentReadingNumber }}</th></tr>
+                                            <tr><th>ID legacy</th><th>Locale / macchina</th><th>Grado</th><th>UFC lettura {{ $currentReadingNumber }}</th></tr>
                                         @endif
                                         </thead>
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
-                                            <tr class="group-row">
-                                                <td colspan="{{ $productionPhase === 'sampling' && $sectionSampleKind === 'air_passive' ? 6 : 5 }}">Reparto: {{ $departmentName }}</td>
-                                            </tr>
-
                                             @foreach ($points as $point)
                                                 <tr>
                                                     <td>{{ $point->legacy_code ?: '-' }}</td>
@@ -2060,7 +2054,6 @@
                                                         {{ $point->title }}
                                                         <div class="kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</div>
                                                     </td>
-                                                    <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
                                                     <td>{{ $point->area_label ?: '-' }}</td>
                                                     @php($pointResult = $editingPointResults->get($point->id))
                                                     @php($pointReading = $currentReadingNumber && $pointResult ? $pointResult->readings->firstWhere('reading_number', $currentReadingNumber) : null)
@@ -2213,7 +2206,7 @@
                                 @if ($currentEnvironment === 'acque')
                                     <div class="water-point-list" data-water-step-content="results">
                                         @foreach ($groupedPoints as $departmentName => $points)
-                                            <p class="kind">Reparto: {{ $departmentName }}</p>
+                                            <p class="kind">Tipo di campionamento: {{ $departmentName }}</p>
                                             @foreach ($points as $point)
                                                 @php($pointResult = $editingPointResults->get($point->id))
                                                 <button type="button" class="water-point-card" data-water-open="water_point_{{ $section->id }}_{{ $point->id }}">
@@ -2359,7 +2352,6 @@
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Descrizione punto</th>
-                                                <th>Reparto</th>
                                                 <th>Area dettagliata</th>
                                                 @if ($productionPhase === 'sampling')
                                                     <th>Ora</th>
@@ -2381,7 +2373,6 @@
                                             <tr>
                                                 <th>ID legacy</th>
                                                 <th>Descrizione punto</th>
-                                                <th>Reparto</th>
                                                 <th>Area dettagliata</th>
                                                 <th>Ora</th>
                                                 <th>Operativo</th>
@@ -2394,9 +2385,11 @@
                                         </thead>
                                         <tbody>
                                         @foreach ($groupedPoints as $departmentName => $points)
-                                            <tr class="group-row">
-                                                <td colspan="{{ $currentEnvironment === 'acque' ? 15 : (in_array($currentEnvironment, ['produzione', 'operatori'], true) ? ($productionPhase === 'sampling' ? ($currentEnvironment === 'produzione' ? 7 : 5) : 5) : 10) }}">Reparto: {{ $departmentName }}</td>
-                                            </tr>
+                                            @if ($currentEnvironment === 'acque')
+                                                <tr class="group-row">
+                                                    <td colspan="15">Tipo di campionamento: {{ $departmentName }}</td>
+                                                </tr>
+                                            @endif
 
                                             @foreach ($points as $point)
                                                 <tr>
@@ -2461,7 +2454,6 @@
                                                             {{ $point->title }}
                                                             <div class="kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</div>
                                                         </td>
-                                                        <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
                                                         <td>{{ $point->area_label ?: '-' }}</td>
                                                         @php($pointResult = $editingPointResults->get($point->id))
                                                         @php($pointReading = $currentReadingNumber && $pointResult ? $pointResult->readings->firstWhere('reading_number', $currentReadingNumber) : null)
@@ -2508,7 +2500,6 @@
                                                             {{ $point->title }}
                                                             <div class="kind">{{ $sampleKindLabels[$point->sample_kind] ?? $point->sample_kind }}</div>
                                                         </td>
-                                                        <td>{{ $point->department?->name ?: 'Senza reparto' }}</td>
                                                         <td>{{ $point->area_label ?: '-' }}</td>
                                                         <td>
                                                             <input type="time" name="points[{{ $point->id }}][sampled_at]" value="{{ old("points.{$point->id}.sampled_at", data_get($editingPointResults->get($point->id), 'sampled_at')) }}">

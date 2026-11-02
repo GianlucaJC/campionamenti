@@ -1556,7 +1556,7 @@ class MonitoringController extends Controller
                     'view' => 'gestione-punti',
                     'env' => $section->environment ?: 'produzione',
                 ])
-                ->withErrors(['monitoring_department_id' => 'Il reparto selezionato non appartiene alla sezione scelta.']);
+                ->withErrors(['monitoring_department_id' => 'Il tipo di campionamento selezionato non appartiene alla sezione scelta.']);
         }
 
         $section->samplingPoints()->create([
@@ -1663,7 +1663,7 @@ class MonitoringController extends Controller
                     'view' => 'gestione-punti',
                     'env' => $section->environment ?: 'produzione',
                 ])
-                ->withErrors(['monitoring_department_id' => 'Il reparto selezionato non appartiene alla sezione scelta.']);
+                ->withErrors(['monitoring_department_id' => 'Il tipo di campionamento selezionato non appartiene alla sezione scelta.']);
         }
 
         $point->update([
@@ -1749,7 +1749,7 @@ class MonitoringController extends Controller
                     'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
-                ->withErrors(['department' => 'Il reparto selezionato non appartiene alla sezione scelta.']);
+                ->withErrors(['department' => 'Il tipo di campionamento selezionato non appartiene alla sezione scelta.']);
         }
 
         $quickAction = $request->input('quick_action');
@@ -2034,7 +2034,7 @@ class MonitoringController extends Controller
                     'view' => 'gestione-reparti',
                     'env' => $section->environment ?: 'produzione',
                 ])
-                ->withErrors(['department' => 'Il reparto selezionato non appartiene alla sezione scelta.']);
+                ->withErrors(['department' => 'Il tipo di campionamento selezionato non appartiene alla sezione scelta.']);
         }
 
         $data = $request->validate([
