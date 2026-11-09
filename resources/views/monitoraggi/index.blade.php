@@ -1686,7 +1686,28 @@
 
         @if ($currentView === 'nuovo' || $currentView === 'gestione-punti')
             @if (auth()->user()?->isOperatore() && $currentView === 'nuovo' && in_array($currentEnvironment, ['produzione', 'operatori', 'clean_room'], true) && $samplingSession)
-                <form id="save-session-phase" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form>
+                @php
+                    $sessionPhaseHasEditableSections = $filteredSections->contains(function ($section) use ($productionPhase, $sessionChecksBySection): bool {
+                        $maximumReadings = max(1, (int) $section->departments->max('readings_count'));
+                        $readingNumber = preg_match('/^reading_([1-9][0-9]*)$/', $productionPhase, $matches)
+                            ? (int) $matches[1]
+                            : null;
+
+                        if ($readingNumber && $readingNumber > $maximumReadings) {
+                            return false;
+                        }
+
+                        $sectionCheck = $sessionChecksBySection->get($section->id);
+                        $phaseState = $sectionCheck?->phaseStates->firstWhere('phase', $productionPhase);
+                        $phaseSigned = filled($phaseState?->signed_by_user_id);
+                        $phaseLocked = $sectionCheck
+                            && $phaseSigned
+                            && (! filled($phaseState?->reopened_at) || (int) $phaseState?->signed_by_user_id !== (int) auth()->id());
+
+                        return ! $phaseLocked;
+                    });
+                @endphp
+                <form id="save-session-phase" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form data-session-has-editable-sections="{{ $sessionPhaseHasEditableSections ? 'true' : 'false' }}">
                     @csrf
                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
                     <p class="hint">Salvataggio unico della fase per tutti i reparti della sessione.</p>
@@ -2601,7 +2622,7 @@
             var reopenButton = sessionPhaseForm.querySelector('[data-session-reopen]');
             var reopenReasonField = sessionPhaseForm.querySelector('[data-session-reopen-reason]');
 
-            if (! editableSectionForms.length) {
+            if (! editableSectionForms.length && sessionPhaseForm.dataset.sessionHasEditableSections !== 'true') {
                 saveButton.hidden = true;
                 signButton.hidden = true;
             }

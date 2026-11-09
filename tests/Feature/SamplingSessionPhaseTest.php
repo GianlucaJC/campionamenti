@@ -138,6 +138,17 @@ class SamplingSessionPhaseTest extends TestCase
             $this->assertSame('Correzione orari', $state->reopening_reason);
         }
 
+        $this->get(route('monitoraggi.index', [
+            'view' => 'nuovo',
+            'env' => 'produzione',
+            'phase' => 'sampling',
+            'session' => $session->id,
+        ]))
+            ->assertOk()
+            ->assertSee('data-session-save', false)
+            ->assertSee('data-session-has-editable-sections="true"', false)
+            ->assertSee('data-batch-section-id', false);
+
         $this->assertDatabaseCount('microbiological_checks', 2);
         $this->assertDatabaseCount('microbiological_check_phase_logs', 6);
     }
