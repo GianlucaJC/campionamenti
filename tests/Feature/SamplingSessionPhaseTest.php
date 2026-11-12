@@ -437,4 +437,55 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertDontSee('Punto da non mostrare')
             ->assertDontSee('UFC/m3 (lettura 1)');
     }
+
+    public function test_production_first_reading_can_be_saved_without_sampled_points(): void
+    {
+        $user = User::factory()->create(['role' => 'operatore']);
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'produzione',
+            'header' => ['sampled_on' => '2026-10-27'],
+            'created_by_user_id' => $user->id,
+        ]);
+        $section = MonitoringSection::query()->create([
+            'code' => 'production-empty-first-reading',
+            'name' => 'Nessun punto campionato',
+            'environment' => 'produzione',
+            'is_active' => true,
+        ]);
+        $department = $section->departments()->create([
+            'code' => 'surface',
+            'name' => 'Superfici',
+            'readings_count' => 2,
+            'is_active' => true,
+        ]);
+        SamplingPoint::query()->create([
+            'monitoring_section_id' => $section->id,
+            'monitoring_department_id' => $department->id,
+            'title' => 'Punto da non mostrare',
+            'sample_kind' => 'surface_contact',
+            'is_active' => true,
+        ]);
+        $check = MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $section->id,
+            'sampling_session_id' => $session->id,
+            'sampled_on' => '2026-10-27',
+            'created_by_user_id' => $user->id,
+        ]);
+        $check->phaseStates()->create([
+            'phase' => 'sampling',
+            'signed_by_user_id' => $user->id,
+            'signed_at' => now(),
+        ]);
+
+        $this->actingAs($user)->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'reading_1',
+            'checks' => [
+                $section->id => [],
+            ],
+        ])->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseCount('microbiological_check_points', 0);
+    }
 }

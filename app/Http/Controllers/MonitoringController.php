@@ -977,7 +977,7 @@ class MonitoringController extends Controller
             'enterococci_incubation_started_on' => ['nullable', 'date'],
             'enterococci_incubation_finished_on' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:4000'],
-            'points' => ['required', 'array'],
+            'points' => ['nullable', 'array'],
         ];
 
         foreach ($pointCollection as $point) {

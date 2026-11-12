@@ -40,6 +40,8 @@ Il sistema salva solo il parametro compatibile con il tipo selezionato.
 
 ## Archivio e audit
 
+- L'archivio mantiene la paginazione per data. In Produzione, Clean room e Operatori, ogni sessione della stessa data ha una scheda distinta con reparti, punti, stato delle firme e link di modifica propri.
+- I campionamenti storici senza identificativo di sessione sono mostrati separatamente, senza unirli ad altri campionamenti della stessa data.
 - I campionamenti eliminati usano il soft delete: non vengono rimossi fisicamente dal database.
 - Un campionamento senza firme puo essere eliminato direttamente da un operatore.
 - Un campionamento con una o piu firme puo essere eliminato solo inserendo una motivazione obbligatoria.
