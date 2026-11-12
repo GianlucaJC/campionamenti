@@ -21,6 +21,7 @@ class MonitoringSection extends Model
         'sub_environment',
         'name',
         'description',
+        'image_path',
         'sort_order',
         'is_active',
     ];

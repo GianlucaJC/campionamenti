@@ -72,16 +72,22 @@ Comandi principali:
 3. php artisan key:generate
 4. php artisan migrate
 5. php artisan db:seed --class=MonitoringTemplateSeeder
-6. npm install
-7. npm run dev
-8. php artisan serve
+6. php artisan storage:link
+7. npm install
+8. npm run dev
+9. php artisan serve
 
 Per aggiornare un'installazione esistente dopo il pull delle modifiche:
 
 ```bash
 php artisan migrate
+php artisan storage:link
 php artisan optimize:clear
 ```
+
+## Foto dei reparti di Produzione
+
+In `Gestione reparti`, l'admin puo caricare una foto JPEG, PNG o WebP (massimo 5 MB) per ogni reparto di Produzione. La foto viene mostrata agli operatori nella relativa scheda durante il nuovo campionamento.
 
 ## Struttura dati (core)
 

@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -1906,7 +1907,18 @@ class MonitoringController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['nullable', 'string', 'max:255'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'remove_image' => ['nullable', 'boolean'],
         ]);
+
+        if (
+            $section->environment !== 'produzione'
+            && ($request->hasFile('image') || $request->boolean('remove_image'))
+        ) {
+            return back()->withErrors([
+                'image' => 'Le immagini dei reparti sono disponibili solo per Produzione.',
+            ]);
+        }
 
         $name = trim($data['name']);
         $matchingSections = MonitoringSection::query()
@@ -1939,7 +1951,28 @@ class MonitoringController extends Controller
             $attributes['code'] = $code;
         }
 
+        $previousImagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('production-departments', 'public');
+
+            if ($imagePath === false) {
+                return back()->withErrors([
+                    'image' => 'Non è stato possibile salvare l’immagine del reparto.',
+                ]);
+            }
+
+            $attributes['image_path'] = $imagePath;
+            $previousImagePath = $section->image_path;
+        } elseif ($request->boolean('remove_image') && $section->image_path) {
+            $attributes['image_path'] = null;
+            $previousImagePath = $section->image_path;
+        }
+
         $section->update($attributes);
+
+        if ($previousImagePath) {
+            Storage::disk('public')->delete($previousImagePath);
+        }
 
         return redirect()
             ->route('monitoraggi.index', array_filter([

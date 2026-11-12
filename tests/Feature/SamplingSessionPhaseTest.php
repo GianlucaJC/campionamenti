@@ -9,7 +9,9 @@ use App\Models\SamplingSession;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class SamplingSessionPhaseTest extends TestCase
@@ -38,6 +40,7 @@ class SamplingSessionPhaseTest extends TestCase
             '2026_07_29_000027_add_soft_deletes_to_monitoring_departments_table',
             '2026_09_03_000029_add_sampling_session_id_to_microbiological_checks_table',
             '2026_09_03_000030_create_sampling_sessions_table',
+            '2026_11_12_000001_add_image_path_to_monitoring_sections_table',
         ] as $migration) {
             (require database_path("migrations/{$migration}.php"))->up();
         }
@@ -487,5 +490,38 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseCount('microbiological_check_points', 0);
+    }
+
+    public function test_admin_can_upload_a_production_department_image_visible_to_operators(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $section = MonitoringSection::query()->create([
+            'code' => 'reparto-con-foto',
+            'name' => 'Reparto con foto',
+            'environment' => 'produzione',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin)->patch(route('monitoraggi.sections.update', $section), [
+            'name' => $section->name,
+            'code' => $section->code,
+            'image' => UploadedFile::fake()->image('reparto.jpg', 120, 80),
+        ])->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $imagePath = $section->fresh()->image_path;
+
+        $this->assertNotNull($imagePath);
+        Storage::disk('public')->assertExists($imagePath);
+
+        $this->actingAs($operator)->get(route('monitoraggi.index', [
+            'view' => 'nuovo',
+            'env' => 'produzione',
+        ]))
+            ->assertOk()
+            ->assertSee(Storage::disk('public')->url($imagePath), false)
+            ->assertSee('Foto del reparto Reparto con foto', false);
     }
 }

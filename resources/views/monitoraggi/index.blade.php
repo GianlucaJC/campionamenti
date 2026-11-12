@@ -269,6 +269,28 @@
             padding: 16px;
         }
 
+        .department-image {
+            margin: 0 0 16px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .department-image summary {
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .department-image img {
+            display: block;
+            width: min(100%, 720px);
+            max-height: 360px;
+            object-fit: cover;
+            margin: 12px;
+        }
+
         .meta-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(140px, 1fr));
@@ -1532,7 +1554,7 @@
 
                     <div class="department-table">
                         @forelse ($filteredSections as $section)
-                            <form class="department-row" action="{{ route('monitoraggi.sections.update', $section) }}" method="POST">
+                            <form class="department-row" action="{{ route('monitoraggi.sections.update', $section) }}" method="POST" enctype="multipart/form-data">
                                 @csrf
                                 @method('PATCH')
 
@@ -1545,6 +1567,21 @@
                                     <label for="section_code_{{ $section->id }}">Codice</label>
                                     <input id="section_code_{{ $section->id }}" type="text" name="code" maxlength="255" value="{{ $section->code }}">
                                 </div>
+
+                                @if ($currentEnvironment === 'produzione')
+                                    <div class="field">
+                                        <label for="section_image_{{ $section->id }}">Foto reparto</label>
+                                        <input id="section_image_{{ $section->id }}" type="file" name="image" accept="image/jpeg,image/png,image/webp">
+                                        <span class="hint">JPEG, PNG o WebP; massimo 5 MB.</span>
+                                        @if ($section->image_path)
+                                            <a href="{{ Storage::disk('public')->url($section->image_path) }}" target="_blank" rel="noopener">Visualizza foto attuale</a>
+                                            <label>
+                                                <input type="checkbox" name="remove_image" value="1">
+                                                Rimuovi foto
+                                            </label>
+                                        @endif
+                                    </div>
+                                @endif
 
                                 <div class="department-move">
                                     <button type="submit" class="btn-small" title="Sposta su" name="direction" value="up" formaction="{{ route('monitoraggi.sections.move', $section) }}">↑</button>
@@ -1791,6 +1828,13 @@
                     </summary>
 
                     <div class="section-body">
+                        @if ($currentView === 'nuovo' && auth()->user()?->isOperatore() && $currentEnvironment === 'produzione' && $section->image_path)
+                            <details class="department-image">
+                                <summary>Visualizza foto reparto</summary>
+                                <img src="{{ Storage::disk('public')->url($section->image_path) }}" alt="Foto del reparto {{ $section->name }}">
+                            </details>
+                        @endif
+
                         @if ($currentView === 'gestione-punti' && auth()->user()?->isAdmin())
                             <details class="point-creator">
                                 <summary>
