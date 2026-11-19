@@ -18,11 +18,28 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class MonitoringController extends Controller
 {
+    private const WATER_SESSION_FIELDS = [
+        'sampled_on', 'incubation_started_on', 'operator_name', 'cq_operator_name',
+        'membrane_lot', 'bottle_sterilization_lot',
+        'r2a_agar_lot', 'r2a_agar_expires_on',
+        'coliform_agar_lot', 'coliform_agar_expires_on',
+        'pseudomonas_cn_lot', 'pseudomonas_cn_expires_on',
+        'slanetz_bartley_lot', 'slanetz_bartley_expires_on',
+    ];
+
+    private function sessionHeaderForSection(SamplingSession $session, MonitoringSection $section): array
+    {
+        return $section->environment === 'acque'
+            ? array_intersect_key($session->header, array_flip(self::WATER_SESSION_FIELDS))
+            : $session->header;
+    }
+
     /**
      * Show all monitoring sections and their dynamic points.
      */
@@ -398,15 +415,19 @@ class MonitoringController extends Controller
                     'second_cfu_count' => 'Lettura 2',
                     'aerobic_plate_cfu' => 'Aerobi UFC/piastra',
                     'aerobic_cfu_per_ml' => 'Aerobi UFC/ml',
+                    'r2a_cfu_per_ml' => 'R2A UFC/ml',
                     'coliform_plate_cfu' => 'Coliformi UFC/piastra',
                     'coliform_confirmed_cfu' => 'Coliformi UFC confermate',
                     'coliform_cfu_per_100ml' => 'Coliformi UFC/100 ml',
+                    'coliform_cfu_per_ml' => 'Coliformi UFC/ml',
                     'pseudomonas_plate_cfu' => 'Pseudomonas UFC/piastra',
                     'pseudomonas_confirmed_cfu' => 'Pseudomonas UFC confermate',
                     'pseudomonas_cfu_per_100ml' => 'Pseudomonas UFC/100 ml',
+                    'pseudomonas_cfu_per_ml' => 'Pseudomonas UFC/ml',
                     'enterococci_plate_cfu' => 'Enterococchi UFC/piastra',
                     'enterococci_confirmed_cfu' => 'Enterococchi UFC confermate',
                     'enterococci_cfu_per_100ml' => 'Enterococchi UFC/100 ml',
+                    'enterococci_cfu_per_ml' => 'Enterococchi UFC/ml',
                     'ph_value' => 'pH',
                 ];
                 $seriesByLabel = [];
@@ -501,7 +522,7 @@ class MonitoringController extends Controller
         }
 
         $samplingSession = $this->sessionForSection($request, $section);
-        $request->merge(array_merge($request->all(), $samplingSession->header));
+        $request->merge(array_merge($request->all(), $this->sessionHeaderForSection($samplingSession, $section)));
 
         $pointCollection = $section->samplingPoints()
             ->with('department')
@@ -510,7 +531,7 @@ class MonitoringController extends Controller
             ->get();
 
         $this->normalizeTimeInputs($request, $pointCollection);
-        $data = $request->validate($this->buildCheckRules($pointCollection));
+        $data = $request->validate($this->buildCheckRules($pointCollection, $section->environment === 'acque'));
         $userId = (int) Auth::id();
         $isPhasedEnvironment = $this->isPhasedEnvironment($section);
         $samplingSessionId = $samplingSession->id;
@@ -573,13 +594,19 @@ class MonitoringController extends Controller
         $subEnvironment = $request->input('sub_environment') ?: null;
 
         $header = $this->checkHeaderPayload($data);
+        $sessionHeader = $header;
+        if ($environment === 'acque') {
+            $header = array_intersect_key($header, array_flip(self::WATER_SESSION_FIELDS));
+            $existingSession = SamplingSession::query()->find($session);
+            $sessionHeader = array_merge($existingSession?->header ?? [], $header);
+        }
 
         SamplingSession::query()->updateOrCreate(
             ['id' => $session],
             [
                 'environment' => $environment,
                 'sub_environment' => $subEnvironment,
-                'header' => $header,
+                'header' => $sessionHeader,
                 'created_by_user_id' => $request->user()->id,
             ]
         );
@@ -755,7 +782,7 @@ class MonitoringController extends Controller
 
         $samplingSession = SamplingSession::query()->find($check->sampling_session_id);
         if ($samplingSession) {
-            $request->merge(array_merge($request->all(), $samplingSession->header));
+            $request->merge(array_merge($request->all(), $this->sessionHeaderForSection($samplingSession, $section)));
         }
 
         $pointCollection = $section->samplingPoints()
@@ -765,7 +792,7 @@ class MonitoringController extends Controller
             ->get();
 
         $this->normalizeTimeInputs($request, $pointCollection);
-        $data = $request->validate($this->buildCheckRules($pointCollection));
+        $data = $request->validate($this->buildCheckRules($pointCollection, $section->environment === 'acque'));
 
         $isPhasedEnvironment = $this->isPhasedEnvironment($section);
 
@@ -933,7 +960,7 @@ class MonitoringController extends Controller
     /**
      * Build validation rules for a check payload.
      */
-    private function buildCheckRules($pointCollection): array
+    private function buildCheckRules($pointCollection, bool $isWater = false): array
     {
         $rules = [
             'entry_phase' => ['nullable', 'regex:/^(sampling|reading_[1-9][0-9]*)$/'],
@@ -1007,18 +1034,36 @@ class MonitoringController extends Controller
                 $rules["{$prefix}.second_growth_result"] = ['nullable', 'in:growth,no_growth'];
             }
 
-            if ($point->sample_kind === 'water') {
-                $rules["{$prefix}.aerobic_plate_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.aerobic_cfu_per_ml"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.coliform_plate_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.coliform_confirmed_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.coliform_cfu_per_100ml"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.pseudomonas_plate_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.pseudomonas_confirmed_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.pseudomonas_cfu_per_100ml"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.enterococci_plate_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.enterococci_confirmed_cfu"] = ['nullable', 'integer', 'min:0'];
-                $rules["{$prefix}.enterococci_cfu_per_100ml"] = ['nullable', 'integer', 'min:0'];
+            if ($isWater) {
+                foreach (SamplingPoint::WATER_MICROBIOLOGY as $analysis => $fields) {
+                    if (! in_array($analysis, $point->waterAnalyses(), true)) {
+                        continue;
+                    }
+
+                    $rules["{$prefix}.{$fields['plate']}"] = ['nullable', 'integer', 'min:0', 'max:4294967295'];
+                    if ($fields['confirmed']) {
+                        $rules["{$prefix}.{$fields['confirmed']}"] = ['nullable', 'integer', 'min:0', 'max:4294967295'];
+                    }
+                    $rules["{$prefix}.{$fields['date']}"] = ['nullable', 'date_format:Y-m-d'];
+                }
+                if (in_array('ph', $point->waterAnalyses(), true)) {
+                    $rules["{$prefix}.ph_value"] = ['nullable', 'numeric', 'regex:/^\d{1,18}(?:\.\d)?$/'];
+                }
+                if (in_array('appearance', $point->waterAnalyses(), true)) {
+                    $rules["{$prefix}.appearance_present"] = ['nullable', 'in:1'];
+                    $rules["{$prefix}.appearance_result"] = ['nullable', 'array', 'max:1'];
+                    $rules["{$prefix}.appearance_result.*"] = ['in:conforme,non_conforme'];
+                }
+                $rules["{$prefix}.final_result"] = ['nullable', 'in:conforme,non_conforme'];
+            } elseif ($point->sample_kind === 'water') {
+                foreach ([
+                    'aerobic_plate_cfu', 'aerobic_cfu_per_ml',
+                    'coliform_plate_cfu', 'coliform_confirmed_cfu', 'coliform_cfu_per_100ml',
+                    'pseudomonas_plate_cfu', 'pseudomonas_confirmed_cfu', 'pseudomonas_cfu_per_100ml',
+                    'enterococci_plate_cfu', 'enterococci_confirmed_cfu', 'enterococci_cfu_per_100ml',
+                ] as $field) {
+                    $rules["{$prefix}.{$field}"] = ['nullable', 'integer', 'min:0'];
+                }
                 $rules["{$prefix}.ph_value"] = ['nullable', 'string', 'max:20'];
                 $rules["{$prefix}.appearance_result"] = ['nullable', 'in:conforme,non_conforme'];
                 $rules["{$prefix}.final_result"] = ['nullable', 'in:conforme,non_conforme'];
@@ -1310,6 +1355,10 @@ class MonitoringController extends Controller
             'notes' => $data['notes'] ?? null,
         ]);
 
+        if ($check->section?->environment === 'acque') {
+            $checkPayload = array_intersect_key($checkPayload, array_flip(array_merge(array_keys($data), ['notes'])));
+        }
+
         $phase = $data['entry_phase'] ?? null;
         if ($phase) {
             $phasePayloadFields = ['sampled_on'];
@@ -1324,6 +1373,33 @@ class MonitoringController extends Controller
 
         foreach ($pointCollection as $point) {
             $pointInput = $data['points'][$point->id] ?? [];
+            $isWater = $check->section?->environment === 'acque';
+            if ($isWater) {
+                $allowedFields = ['final_result'];
+                foreach (SamplingPoint::WATER_MICROBIOLOGY as $analysis => $fields) {
+                    if (in_array($analysis, $point->waterAnalyses(), true)) {
+                        $allowedFields[] = $fields['plate'];
+                        $allowedFields[] = $fields['date'];
+                        if ($fields['confirmed']) {
+                            $allowedFields[] = $fields['confirmed'];
+                        }
+                    }
+                }
+                if (in_array('ph', $point->waterAnalyses(), true)) {
+                    $allowedFields[] = 'ph_value';
+                }
+                if (in_array('appearance', $point->waterAnalyses(), true)) {
+                    $allowedFields[] = 'appearance_result';
+                    $allowedFields[] = 'appearance_present';
+                }
+                $pointInput = array_intersect_key($pointInput, array_flip($allowedFields));
+                if (array_key_exists('appearance_present', $pointInput)) {
+                    $pointInput['appearance_result'] = $pointInput['appearance_result'][0] ?? null;
+                    unset($pointInput['appearance_present']);
+                } else {
+                    unset($pointInput['appearance_result']);
+                }
+            }
             $readingNumber = $this->readingNumber($data['entry_phase'] ?? null);
 
             if ($readingNumber && $readingNumber > (int) ($point->department?->readings_count ?? 2)) {
@@ -1341,11 +1417,10 @@ class MonitoringController extends Controller
                 continue;
             }
 
-            if (! $hasValue) {
-                if ($existingResult && empty($data['entry_phase'])) {
+            if (! $hasValue && (! $isWater || ! $existingResult || $pointInput === [])) {
+                if ($existingResult && empty($data['entry_phase']) && ! $isWater) {
                     $existingResult->delete();
                 }
-
                 continue;
             }
 
@@ -1382,6 +1457,17 @@ class MonitoringController extends Controller
                 'final_result' => $pointInput['final_result'] ?? null,
                 'notes' => $pointInput['notes'] ?? null,
             ];
+
+            if ($isWater) {
+                $payload = $pointInput;
+                foreach (SamplingPoint::WATER_MICROBIOLOGY as $analysis => $fields) {
+                    $source = $fields['confirmed'] ?: $fields['plate'];
+                    if (in_array($analysis, $point->waterAnalyses(), true) && array_key_exists($source, $pointInput)) {
+                        $value = $pointInput[$source];
+                        $payload[$fields['per_ml']] = $value === null || $value === '' ? null : ((int) $value / 100);
+                    }
+                }
+            }
 
             if (($data['entry_phase'] ?? null) === 'sampling') {
                 $phaseFields = [
@@ -1525,16 +1611,19 @@ class MonitoringController extends Controller
             abort(403, 'Solo un admin puo definire un nuovo punto campionamento.');
         }
 
+        $isWater = $section->environment === 'acque';
         $data = $request->validate([
             'legacy_code' => ['nullable', 'string', 'max:50'],
             'title' => ['required', 'string', 'max:255'],
             'monitoring_department_id' => ['nullable', 'integer', 'exists:monitoring_departments,id'],
             'area_label' => ['nullable', 'string', 'max:255'],
-            'sample_kind' => ['required', 'string', 'max:50'],
+            'sample_kind' => [$isWater ? 'nullable' : 'required', 'string', 'max:50'],
             'default_volume_liters' => ['nullable', 'integer', 'min:0'],
             'default_exposure_hours' => ['nullable', 'integer', 'in:3,4'],
-            'requires_operational_status' => ['required', 'boolean'],
-            'requires_product_lot' => ['required', 'boolean'],
+            'requires_operational_status' => [$isWater ? 'nullable' : 'required', 'boolean'],
+            'requires_product_lot' => [$isWater ? 'nullable' : 'required', 'boolean'],
+            'water_analyses' => ['sometimes', 'array'],
+            'water_analyses.*' => ['string', 'distinct', Rule::in(array_keys(SamplingPoint::WATER_ANALYSES))],
             'anchor_point_id' => ['nullable', 'integer'],
             'insert_position' => ['required', 'in:before,after,end'],
         ]);
@@ -1562,18 +1651,19 @@ class MonitoringController extends Controller
 
         $section->samplingPoints()->create([
             'monitoring_department_id' => $departmentId,
-            'legacy_code' => $data['legacy_code'] ?: null,
+            'legacy_code' => $data['legacy_code'] ?? null,
             'title' => $data['title'],
-            'area_label' => $data['area_label'] ?: null,
-            'sample_kind' => $data['sample_kind'],
-            'default_volume_liters' => $data['sample_kind'] === 'air_active'
+            'area_label' => $data['area_label'] ?? null,
+            'sample_kind' => $isWater ? 'water' : $data['sample_kind'],
+            'default_volume_liters' => ! $isWater && $data['sample_kind'] === 'air_active'
                 ? ($data['default_volume_liters'] ?? null)
                 : null,
-            'default_exposure_hours' => $data['sample_kind'] === 'air_passive'
+            'default_exposure_hours' => ! $isWater && $data['sample_kind'] === 'air_passive'
                 ? ($data['default_exposure_hours'] ?? null)
                 : null,
-            'requires_operational_status' => (bool) $data['requires_operational_status'],
-            'requires_product_lot' => (bool) $data['requires_product_lot'],
+            'requires_operational_status' => $isWater ? false : (bool) $data['requires_operational_status'],
+            'requires_product_lot' => $isWater ? false : (bool) $data['requires_product_lot'],
+            'water_analyses' => $isWater ? ($data['water_analyses'] ?? []) : null,
             'sort_order' => $sortOrder,
             'is_active' => true,
         ]);
@@ -1644,6 +1734,7 @@ class MonitoringController extends Controller
                     : "Punto '{$point->title}' oscurato in '{$section->name}'.");
         }
 
+        $isWater = $section->environment === 'acque';
         $data = $request->validate([
             'legacy_code' => ['nullable', 'string', 'max:50'],
             'title' => ['required', 'string', 'max:255'],
@@ -1652,8 +1743,10 @@ class MonitoringController extends Controller
             'sample_kind' => ['required', 'string', 'max:50'],
             'default_volume_liters' => ['nullable', 'integer', 'min:0'],
             'default_exposure_hours' => ['nullable', 'integer', 'in:3,4'],
-            'requires_operational_status' => ['required', 'boolean'],
-            'requires_product_lot' => ['required', 'boolean'],
+            'requires_operational_status' => [$isWater ? 'nullable' : 'required', 'boolean'],
+            'requires_product_lot' => [$isWater ? 'nullable' : 'required', 'boolean'],
+            'water_analyses' => ['sometimes', 'array'],
+            'water_analyses.*' => ['string', 'distinct', Rule::in(array_keys(SamplingPoint::WATER_ANALYSES))],
             'is_active' => ['required', 'boolean'],
         ]);
 
@@ -1669,9 +1762,9 @@ class MonitoringController extends Controller
 
         $point->update([
             'monitoring_department_id' => $departmentId,
-            'legacy_code' => $data['legacy_code'] ?: null,
+            'legacy_code' => $data['legacy_code'] ?? null,
             'title' => $data['title'],
-            'area_label' => $data['area_label'] ?: null,
+            'area_label' => $data['area_label'] ?? null,
             'sample_kind' => $data['sample_kind'],
             'default_volume_liters' => $data['sample_kind'] === 'air_active'
                 ? ($data['default_volume_liters'] ?? null)
@@ -1679,8 +1772,9 @@ class MonitoringController extends Controller
             'default_exposure_hours' => $data['sample_kind'] === 'air_passive'
                 ? ($data['default_exposure_hours'] ?? null)
                 : null,
-            'requires_operational_status' => (bool) $data['requires_operational_status'],
-            'requires_product_lot' => (bool) $data['requires_product_lot'],
+            'requires_operational_status' => $isWater ? $point->requires_operational_status : (bool) $data['requires_operational_status'],
+            'requires_product_lot' => $isWater ? $point->requires_product_lot : (bool) $data['requires_product_lot'],
+            'water_analyses' => $isWater ? ($data['water_analyses'] ?? []) : $point->water_analyses,
             'is_active' => (bool) $data['is_active'],
         ]);
 

@@ -38,6 +38,10 @@ Dal pannello admin, il parametro richiesto dipende dal tipo di campionamento:
 
 Il sistema salva solo il parametro compatibile con il tipo selezionato.
 
+Per i punti Acque l'admin puo indicare il locale e selezionare Aspetto, pH, R2A, Coliformi, Pseudomonas ed Enterococchi. Le analisi sono tutte selezionate per i nuovi punti e per quelli preesistenti senza configurazione; e possibile deselezionarle anche tutte. L'operatore vede solo le analisi abilitate: il risultato UFC/ml e calcolato dividendo per 100 le UFC/piastra per R2A o le UFC confermate per le altre analisi. Le date di fine incubazione sono registrate per punto e analisi. I risultati storici UFC/100 ml rimangono separati.
+
+Nell'intestazione della sessione Acque si impostano i lotti di membrana e sterilizzazione e i lotti e le scadenze dei quattro terreni. Questi dati sono condivisi tra le sezioni; gli altri dati della scheda di campionamento rimangono specifici della sezione.
+
 ## Archivio e audit
 
 - L'archivio mantiene la paginazione per data. In Produzione, Clean room e Operatori, ogni sessione della stessa data ha una scheda distinta con reparti, punti, stato delle firme e link di modifica propri.

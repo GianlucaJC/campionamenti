@@ -9,41 +9,44 @@
 
 <section class="water-sampling-sheet">
     <h3 class="water-sheet-title">Dati campionamento</h3>
+    @if ($samplingSession)
+        <p class="hint">I dati condivisi si modificano nell'intestazione della sessione.</p>
+    @endif
     <div class="water-sheet-header">
         <div class="field">
             <label for="facility_name_{{ $section->id }}">Stabilimento</label>
-            <input id="facility_name_{{ $section->id }}" type="text" name="facility_name" value="{{ old('facility_name', $headerCheck?->facility_name) }}" maxlength="120">
+            <input id="facility_name_{{ $section->id }}" type="text" name="facility_name" value="{{ old('facility_name', data_get($headerCheck, 'facility_name')) }}" maxlength="120">
         </div>
         <div class="field">
             <label for="sampled_on_{{ $section->id }}">Data prelievo</label>
-            <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', $headerCheck?->sampled_on ?: now()->toDateString()) }}" required>
+            <input id="sampled_on_{{ $section->id }}" type="date" name="sampled_on" value="{{ old('sampled_on', data_get($headerCheck, 'sampled_on') ?: now()->toDateString()) }}" @readonly($samplingSession) required>
         </div>
         <div class="field">
             <label for="sampled_time_{{ $section->id }}">Ora prelievo</label>
-            <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', $headerCheck?->sampled_time) }}">
+            <input id="sampled_time_{{ $section->id }}" type="time" name="sampled_time" value="{{ old('sampled_time', data_get($headerCheck, 'sampled_time')) }}">
         </div>
         <div class="field">
             <label for="membrane_lot_{{ $section->id }}">Lotto membrana filtrante</label>
-            <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', $headerCheck?->membrane_lot) }}" maxlength="120">
+            <input id="membrane_lot_{{ $section->id }}" type="text" name="membrane_lot" value="{{ old('membrane_lot', data_get($headerCheck, 'membrane_lot')) }}" maxlength="120" @readonly($samplingSession)>
         </div>
         <div class="field">
             <label for="bottle_sterilization_lot_{{ $section->id }}">Sterilizzazione materiali</label>
-            <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', $headerCheck?->bottle_sterilization_lot) }}" maxlength="120">
+            <input id="bottle_sterilization_lot_{{ $section->id }}" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', data_get($headerCheck, 'bottle_sterilization_lot')) }}" maxlength="120" @readonly($samplingSession)>
         </div>
     </div>
 
     <div class="water-signature-row">
         <div class="field">
             <label for="operator_name_{{ $section->id }}">Campionatore - firma</label>
-            <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', $headerCheck?->operator_name ?: auth()->user()?->name) }}" maxlength="120">
+            <input id="operator_name_{{ $section->id }}" type="text" name="operator_name" value="{{ old('operator_name', data_get($headerCheck, 'operator_name') ?: auth()->user()?->name) }}" maxlength="120" @readonly($samplingSession)>
         </div>
         <div class="field" data-water-step-content="results">
             <label for="incubation_started_signature_{{ $section->id }}">Firma inizio incubazione</label>
-            <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', $headerCheck?->incubation_started_signature) }}" maxlength="120">
+            <input id="incubation_started_signature_{{ $section->id }}" type="text" name="incubation_started_signature" value="{{ old('incubation_started_signature', data_get($headerCheck, 'incubation_started_signature')) }}" maxlength="120">
         </div>
         <div class="field" data-water-step-content="results">
             <label for="incubation_finished_signature_{{ $section->id }}">Firma fine incubazione</label>
-            <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', $headerCheck?->incubation_finished_signature) }}" maxlength="120">
+            <input id="incubation_finished_signature_{{ $section->id }}" type="text" name="incubation_finished_signature" value="{{ old('incubation_finished_signature', data_get($headerCheck, 'incubation_finished_signature')) }}" maxlength="120">
         </div>
     </div>
 
@@ -54,11 +57,11 @@
         @endforeach
         <div class="water-media-cell water-media-label">Lotto</div>
         @foreach ($waterMedia as $media)
-            <div class="water-media-cell"><input type="text" name="{{ $media['lot'] }}" value="{{ old($media['lot'], data_get($headerCheck, $media['lot'])) }}" maxlength="120"></div>
+            <div class="water-media-cell"><input type="text" name="{{ $media['lot'] }}" value="{{ old($media['lot'], data_get($headerCheck, $media['lot'])) }}" maxlength="120" @readonly($samplingSession)></div>
         @endforeach
         <div class="water-media-cell water-media-label">Scadenza</div>
         @foreach ($waterMedia as $media)
-            <div class="water-media-cell"><input type="date" name="{{ $media['expires'] }}" value="{{ old($media['expires'], data_get($headerCheck, $media['expires'])) }}"></div>
+            <div class="water-media-cell"><input type="date" name="{{ $media['expires'] }}" value="{{ old($media['expires'], data_get($headerCheck, $media['expires'])) }}" @readonly($samplingSession)></div>
         @endforeach
         <div class="water-media-cell water-media-label">Temperatura incubazione</div>
         @foreach ($waterMedia as $media)
@@ -85,7 +88,7 @@
     <div class="water-signature-row" data-water-step-content="results">
         <div class="field">
             <label for="cq_operator_name_{{ $section->id }}">Controllo qualità</label>
-            <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', $headerCheck?->cq_operator_name) }}" maxlength="120">
+            <input id="cq_operator_name_{{ $section->id }}" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', data_get($headerCheck, 'cq_operator_name')) }}" maxlength="120" @readonly($samplingSession)>
         </div>
     </div>
 </section>
