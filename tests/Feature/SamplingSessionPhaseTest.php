@@ -863,4 +863,54 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertSee(Storage::disk('public')->url($imagePath), false)
             ->assertSee('Foto del reparto Reparto con foto', false);
     }
+
+    public function test_admin_can_upload_clean_room_and_water_section_images_visible_to_operators(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $operator = User::factory()->create(['role' => 'operatore']);
+
+        foreach ([
+            ['environment' => 'clean_room', 'sub_environment' => 's1', 'name' => 'Clean Room S1'],
+            ['environment' => 'acque', 'sub_environment' => null, 'name' => 'Sezione Acque'],
+        ] as $index => $sectionData) {
+            $section = MonitoringSection::query()->create([
+                'code' => 'sezione-immagine-'.$index,
+                'name' => $sectionData['name'],
+                'environment' => $sectionData['environment'],
+                'sub_environment' => $sectionData['sub_environment'],
+                'is_active' => true,
+            ]);
+
+            $this->actingAs($admin)->get(route('monitoraggi.index', [
+                'view' => 'gestione-sezioni',
+                'env' => $sectionData['environment'],
+                'sub' => $sectionData['sub_environment'],
+            ]))
+                ->assertOk()
+                ->assertSee('name="image"', false);
+
+            $this->patch(route('monitoraggi.sections.update', $section), [
+                'name' => $section->name,
+                'code' => $section->code,
+                'image' => UploadedFile::fake()->image('sezione.jpg', 120, 80),
+            ])->assertSessionHasNoErrors()
+                ->assertRedirect();
+
+            $imagePath = $section->fresh()->image_path;
+
+            $this->assertNotNull($imagePath);
+            Storage::disk('public')->assertExists($imagePath);
+
+            $this->actingAs($operator)->get(route('monitoraggi.index', [
+                'view' => 'nuovo',
+                'env' => $sectionData['environment'],
+                'sub' => $sectionData['sub_environment'],
+            ]))
+                ->assertOk()
+                ->assertSee(Storage::disk('public')->url($imagePath), false)
+                ->assertSee($sectionData['name'], false)
+                ->assertSee($sectionData['environment'] === 'clean_room' ? 'Visualizza foto clean room' : 'Visualizza foto sezione acque', false);
+        }
+    }
 }

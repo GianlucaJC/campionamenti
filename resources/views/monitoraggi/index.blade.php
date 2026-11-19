@@ -1629,9 +1629,9 @@
                                     <input id="section_code_{{ $section->id }}" type="text" name="code" maxlength="255" value="{{ $section->code }}">
                                 </div>
 
-                                @if ($currentEnvironment === 'produzione')
+                                @if (in_array($currentEnvironment, ['produzione', 'clean_room', 'acque'], true))
                                     <div class="field">
-                                        <label for="section_image_{{ $section->id }}">Foto reparto</label>
+                                        <label for="section_image_{{ $section->id }}">{{ $currentEnvironment === 'produzione' ? 'Foto reparto' : ($currentEnvironment === 'clean_room' ? 'Foto clean room' : 'Foto sezione acque') }}</label>
                                         <input id="section_image_{{ $section->id }}" type="file" name="image" accept="image/jpeg,image/png,image/webp">
                                         <span class="hint">JPEG, PNG o WebP; massimo 5 MB.</span>
                                         @if ($section->image_path)
@@ -1889,10 +1889,10 @@
                     </summary>
 
                     <div class="section-body">
-                        @if ($currentView === 'nuovo' && auth()->user()?->isOperatore() && $currentEnvironment === 'produzione' && $section->image_path)
+                        @if ($currentView === 'nuovo' && auth()->user()?->isOperatore() && in_array($currentEnvironment, ['produzione', 'clean_room', 'acque'], true) && $section->image_path)
                             <details class="department-image">
-                                <summary>Visualizza foto reparto</summary>
-                                <img src="{{ Storage::disk('public')->url($section->image_path) }}" alt="Foto del reparto {{ $section->name }}">
+                                <summary>{{ $currentEnvironment === 'produzione' ? 'Visualizza foto reparto' : ($currentEnvironment === 'clean_room' ? 'Visualizza foto clean room' : 'Visualizza foto sezione acque') }}</summary>
+                                <img src="{{ Storage::disk('public')->url($section->image_path) }}" alt="{{ $currentEnvironment === 'produzione' ? 'Foto del reparto' : ($currentEnvironment === 'clean_room' ? 'Foto della clean room' : 'Foto della sezione acque') }} {{ $section->name }}">
                             </details>
                         @endif
 

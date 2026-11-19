@@ -2006,11 +2006,11 @@ class MonitoringController extends Controller
         ]);
 
         if (
-            $section->environment !== 'produzione'
+            ! in_array($section->environment, ['produzione', 'clean_room', 'acque'], true)
             && ($request->hasFile('image') || $request->boolean('remove_image'))
         ) {
             return back()->withErrors([
-                'image' => 'Le immagini dei reparti sono disponibili solo per Produzione.',
+                'image' => 'Le immagini sono disponibili solo per Produzione, Clean room e Acque.',
             ]);
         }
 
@@ -2047,11 +2047,11 @@ class MonitoringController extends Controller
 
         $previousImagePath = null;
         if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('production-departments', 'public');
+            $imagePath = $request->file('image')->store('monitoring-sections', 'public');
 
             if ($imagePath === false) {
                 return back()->withErrors([
-                    'image' => 'Non è stato possibile salvare l’immagine del reparto.',
+                    'image' => 'Non è stato possibile salvare l’immagine della sezione.',
                 ]);
             }
 
