@@ -48,8 +48,8 @@
                 <label for="session_operator_uniform_{{ $section->id }}">Divisa indossata</label>
                 <select id="session_operator_uniform_{{ $section->id }}" name="operator_uniform">
                     <option value="">Seleziona</option>
-                    @foreach (\App\Models\SamplingOperator::UNIFORMS as $uniform)
-                        <option value="{{ $uniform }}" @selected(old('operator_uniform', data_get($sessionHeader, 'operator_uniform')) === $uniform)>{{ $uniform }}</option>
+                    @foreach ($samplingUniforms as $uniform)
+                        <option value="{{ $uniform->name }}" @selected(old('operator_uniform', data_get($sessionHeader, 'operator_uniform')) === $uniform->name)>{{ $uniform->name }}</option>
                     @endforeach
                 </select>
             </div>

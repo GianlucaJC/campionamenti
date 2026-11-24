@@ -22,8 +22,8 @@ Le sezioni, i reparti e i punti di campionamento sono gestiti da database e non 
 
 ## Ruoli
 
-- `operatore`: compila e modifica i campionamenti, consulta l'archivio ed elimina logicamente i campionamenti.
-- `admin`: consulta l'archivio completo, gestisce la struttura di monitoraggio e ripristina i campionamenti eliminati.
+- `operatore`: compila e modifica i campionamenti e consulta l'archivio.
+- `admin`: consulta l'archivio completo, gestisce la struttura e le anagrafiche, elimina le sessioni e ripristina i campionamenti eliminati.
 
 ## Punti di campionamento
 
@@ -42,15 +42,15 @@ Per i punti Acque l'admin puo indicare il locale e selezionare Aspetto, pH, R2A,
 
 Nell'intestazione della sessione Acque si impostano i lotti di membrana e sterilizzazione e i lotti e le scadenze dei quattro terreni. Questi dati sono condivisi tra le sezioni; gli altri dati della scheda di campionamento rimangono specifici della sezione.
 
+Nella vista admin `Anagrafiche operatori` si possono aggiungere ed eliminare divise, operatori campionati e reparti. I nuovi reparti copiano punti e configurazione da un reparto scelto. Le voci gia utilizzate in registrazioni o intestazioni non possono essere eliminate.
+
 ## Archivio e audit
 
 - L'archivio mantiene la paginazione per data. In Produzione, Clean room e Operatori, ogni sessione della stessa data ha una scheda distinta con reparti, punti, stato delle firme e link di modifica propri.
 - I campionamenti storici senza identificativo di sessione sono mostrati separatamente, senza unirli ad altri campionamenti della stessa data.
-- I campionamenti eliminati usano il soft delete: non vengono rimossi fisicamente dal database.
-- Un campionamento senza firme puo essere eliminato direttamente da un operatore.
-- Un campionamento con una o piu firme puo essere eliminato solo inserendo una motivazione obbligatoria.
-- Ogni eliminazione e ripristino viene registrato in `microbiological_check_phase_logs`, con utente, data/ora e, quando richiesta, motivazione.
-- L'admin puo selezionare `Eliminati` nel filtro Stato dell'archivio e ripristinare il campionamento.
+- L'admin puo eliminare logicamente un'intera sessione da `Gestione amministrativa`; se almeno una sezione e firmata la motivazione e obbligatoria.
+- Le eliminazioni logiche e i ripristini sono registrati in `microbiological_check_phase_logs`. Le sezioni eliminate si possono ripristinare dal filtro `Eliminati`.
+- Nel filtro `Eliminati`, l'admin puo anche eliminare definitivamente un'intera sessione dopo conferma: risultati, letture, firme e tracciamenti vengono rimossi senza possibilita di ripristino. La cancellazione definitiva e bloccata se la sessione contiene sezioni ancora attive.
 
 ## Trend
 

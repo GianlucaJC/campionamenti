@@ -11,6 +11,7 @@ use App\Models\MonitoringSection;
 use App\Models\SamplingPoint;
 use App\Models\SamplingOperator;
 use App\Models\SamplingSession;
+use App\Models\SamplingUniform;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,6 +59,7 @@ class MonitoringController extends Controller
                 ['key' => 'gestione-sezioni', 'label' => 'Gestione reparti'],
                 ['key' => 'gestione-reparti', 'label' => 'Gestione tipo di campionamento'],
                 ['key' => 'gestione-punti', 'label' => 'Gestione punti campionamento'],
+                ['key' => 'gestione-operatori', 'label' => 'Anagrafiche operatori'],
                 ['key' => 'trend', 'label' => 'Trend'],
             ];
         }
@@ -101,7 +103,7 @@ class MonitoringController extends Controller
         ];
 
         $includeInactivePoints = $request->user()?->isAdmin() && $currentView === 'gestione-punti';
-        $includeInactiveSections = $request->user()?->isAdmin() && in_array($currentView, ['gestione-sezioni', 'gestione-reparti'], true);
+        $includeInactiveSections = $request->user()?->isAdmin() && in_array($currentView, ['gestione-sezioni', 'gestione-reparti', 'gestione-operatori'], true);
         $includeDeletedDepartments = $request->user()?->isAdmin() && $currentView === 'gestione-reparti';
 
         $sections = MonitoringSection::query()
@@ -131,8 +133,11 @@ class MonitoringController extends Controller
         if (! $availableEnvironments->contains($currentEnvironment)) {
             $currentEnvironment = (string) $availableEnvironments->first();
         }
-        $samplingOperators = $currentEnvironment === 'operatori' && $currentView === 'nuovo'
+        $samplingOperators = $currentEnvironment === 'operatori' && in_array($currentView, ['nuovo', 'gestione-operatori'], true)
             ? SamplingOperator::query()->orderBy('name')->get()
+            : collect();
+        $samplingUniforms = $currentEnvironment === 'operatori' && in_array($currentView, ['nuovo', 'gestione-operatori'], true)
+            ? SamplingUniform::query()->orderBy('name')->get()
             : collect();
 
         $availableSubEnvironments = collect($subEnvironmentLabels[$currentEnvironment] ?? []);
@@ -334,12 +339,22 @@ class MonitoringController extends Controller
         }
 
         $sessionChecksBySection = collect();
+        $hasDeletedSessionSections = false;
         if ($currentView === 'nuovo' && $samplingSessionId && $samplingSession) {
             $sessionChecksBySection = MicrobiologicalCheck::query()
                 ->with(['pointResults.readings', 'phaseStates.signer:id,name'])
                 ->where('sampling_session_id', $samplingSessionId)
                 ->get()
                 ->keyBy('monitoring_section_id');
+
+            if ($sessionChecksBySection->isEmpty() && $this->sessionHasOnlyDeletedChecks($samplingSessionId)) {
+                $hasDeletedSessionSections = true;
+                $filteredSections = collect();
+            } elseif (in_array($currentEnvironment, ['produzione', 'clean_room', 'operatori'], true)) {
+                $deletedSectionIds = $this->deletedSessionSectionIds($samplingSessionId);
+                $hasDeletedSessionSections = $deletedSectionIds !== [];
+                $filteredSections = $filteredSections->reject(fn (MonitoringSection $section) => in_array($section->id, $deletedSectionIds, true))->values();
+            }
         }
         $samplingSessionHeaderLocked = $samplingSessionId
             && $this->samplingSessionHeaderIsLocked($samplingSessionId);
@@ -504,6 +519,7 @@ class MonitoringController extends Controller
             'archiveReadingsOnly' => $archiveReadingsOnly,
             'editingCheck' => $editingCheck,
             'sessionChecksBySection' => $sessionChecksBySection,
+            'hasDeletedSessionSections' => $hasDeletedSessionSections,
             'samplingSessionId' => $samplingSessionId,
             'samplingSession' => $samplingSession,
             'samplingSessionHeaderLocked' => $samplingSessionHeaderLocked,
@@ -514,6 +530,7 @@ class MonitoringController extends Controller
             'trendPointIds' => $trendPointIds,
             'trendSeries' => $trendSeries,
             'samplingOperators' => $samplingOperators,
+            'samplingUniforms' => $samplingUniforms,
         ]);
     }
 
@@ -602,6 +619,12 @@ class MonitoringController extends Controller
             abort(404);
         }
 
+        if ($this->sessionHasOnlyDeletedChecks($session)) {
+            return redirect()->back()->withErrors([
+                'sampling_session_id' => 'La sessione eliminata deve essere ripristinata da un admin prima di essere modificata.',
+            ]);
+        }
+
         if ($this->samplingSessionHeaderIsLocked($session)) {
             return redirect()->back()->withErrors([
                 'sampling_session_id' => $environment === 'operatori'
@@ -666,6 +689,12 @@ class MonitoringController extends Controller
             abort(403, 'Solo un operatore puo compilare il campionamento.');
         }
 
+        if ($this->sessionHasOnlyDeletedChecks($session->id)) {
+            throw ValidationException::withMessages([
+                'sampling_session_id' => 'La sessione eliminata deve essere ripristinata da un admin prima di essere modificata.',
+            ]);
+        }
+
         $operatorSectionId = null;
         if ($session->environment === 'operatori') {
             $operatorSectionId = (int) ($session->header['operator_section'] ?? 0);
@@ -698,6 +727,12 @@ class MonitoringController extends Controller
         ])['entry_phase'];
         $checksInput = $request->input('checks');
         $isReopening = $request->boolean('reopen_phase');
+        $deletedSectionIds = $this->deletedSessionSectionIds($session->id);
+        if (array_intersect(array_map('intval', array_keys($checksInput)), $deletedSectionIds)) {
+            throw ValidationException::withMessages([
+                'checks' => 'Una sezione eliminata deve essere ripristinata da un admin prima di essere modificata.',
+            ]);
+        }
         if ($operatorSectionId && array_diff(array_map('intval', array_keys($checksInput)), [$operatorSectionId])) {
             throw ValidationException::withMessages([
                 'checks' => 'Ogni registrazione Operatori può contenere dati di un solo reparto.',
@@ -706,6 +741,7 @@ class MonitoringController extends Controller
 
         $sections = MonitoringSection::query()
             ->where('is_active', true)
+            ->whereNotIn('id', $deletedSectionIds)
             ->when($operatorSectionId, fn ($query) => $query->whereKey($operatorSectionId))
             ->where(function ($query) use ($session): void {
                 $query->where('environment', $session->environment);
@@ -943,31 +979,43 @@ class MonitoringController extends Controller
     }
 
     /**
-     * Soft-delete a check and require a justification when it has signatures.
+     * Soft-delete the whole session, requiring a justification if any check is signed.
      */
     public function deleteCheck(Request $request, MicrobiologicalCheck $check): RedirectResponse
     {
-        $hasSignature = $this->checkHasSignature($check);
-        $data = $request->validate([
-            'deletion_reason' => [$hasSignature ? 'required' : 'nullable', 'string', 'max:1000'],
-        ]);
-        $reason = filled($data['deletion_reason'] ?? null) ? trim($data['deletion_reason']) : null;
+        DB::transaction(function () use ($check, $request): void {
+            $checks = MicrobiologicalCheck::query()
+                ->when($check->sampling_session_id,
+                    fn ($query) => $query->where('sampling_session_id', $check->sampling_session_id),
+                    fn ($query) => $query->whereKey($check->id))
+                ->lockForUpdate()
+                ->get();
 
-        DB::transaction(function () use ($check, $request, $reason): void {
-            $check->phaseLogs()->create([
-                'phase' => 'archive',
-                'action' => 'soft_deleted',
-                'reason' => $reason,
-                'performed_by_user_id' => $request->user()->id,
-                'logged_at' => now(),
+            if ($checks->isEmpty()) {
+                throw ValidationException::withMessages(['check' => 'La sessione è già stata eliminata.']);
+            }
+
+            $hasSignature = $checks->contains(fn (MicrobiologicalCheck $sessionCheck) => $this->checkHasSignature($sessionCheck));
+            $data = $request->validate([
+                'deletion_reason' => [$hasSignature ? 'required' : 'nullable', 'string', 'max:1000'],
             ]);
+            $reason = filled($data['deletion_reason'] ?? null) ? trim($data['deletion_reason']) : null;
 
-            $check->update(['deleted_by_user_id' => $request->user()->id]);
-            $check->delete();
+            foreach ($checks as $sessionCheck) {
+                $sessionCheck->phaseLogs()->create([
+                    'phase' => 'archive',
+                    'action' => 'soft_deleted',
+                    'reason' => $reason,
+                    'performed_by_user_id' => $request->user()->id,
+                    'logged_at' => now(),
+                ]);
+                $sessionCheck->update(['deleted_by_user_id' => $request->user()->id]);
+                $sessionCheck->delete();
+            }
         });
 
         return $this->redirectToArchive($check)
-            ->with('status', 'Campionamento eliminato. Un admin puo ripristinarlo dall\'archivio eliminati.');
+            ->with('status', 'Sessione eliminata. Un admin puo ripristinare le sezioni dall\'archivio eliminati.');
     }
 
     /**
@@ -978,6 +1026,15 @@ class MonitoringController extends Controller
         if (! $check->trashed()) {
             return $this->redirectToArchive($check)
                 ->withErrors(['check' => 'Il campionamento selezionato non e eliminato.']);
+        }
+
+        if ($check->sampling_session_id && $this->isPhasedEnvironment($check->section)
+            && MicrobiologicalCheck::query()
+                ->where('sampling_session_id', $check->sampling_session_id)
+                ->where('monitoring_section_id', $check->monitoring_section_id)
+                ->exists()) {
+            return $this->redirectToArchive($check)
+                ->withErrors(['check' => 'Esiste già una registrazione attiva per questa sezione nella sessione.']);
         }
 
         DB::transaction(function () use ($check, $request): void {
@@ -993,6 +1050,37 @@ class MonitoringController extends Controller
 
         return $this->redirectToArchive($check)
             ->with('status', 'Campionamento ripristinato correttamente.');
+    }
+
+    public function permanentlyDeleteSession(MicrobiologicalCheck $check): RedirectResponse
+    {
+        if (! $check->trashed()) {
+            return $this->redirectToArchive($check)
+                ->withErrors(['check' => 'Elimina prima la sessione dall’archivio attivo.']);
+        }
+
+        DB::transaction(function () use ($check): void {
+            $query = MicrobiologicalCheck::withTrashed()
+                ->when($check->sampling_session_id,
+                    fn ($query) => $query->where('sampling_session_id', $check->sampling_session_id),
+                    fn ($query) => $query->whereKey($check->id));
+            $checks = $query->lockForUpdate()->get();
+            if ($checks->contains(fn (MicrobiologicalCheck $sessionCheck) => ! $sessionCheck->trashed())) {
+                throw ValidationException::withMessages([
+                    'check' => 'La sessione contiene sezioni attive: eliminale prima di procedere definitivamente.',
+                ]);
+            }
+
+            foreach ($checks as $sessionCheck) {
+                $sessionCheck->forceDelete();
+            }
+            if ($check->sampling_session_id) {
+                SamplingSession::query()->whereKey($check->sampling_session_id)->delete();
+            }
+        });
+
+        return $this->redirectToArchive($check)
+            ->with('status', 'Sessione eliminata definitivamente, inclusi risultati, firme e tracciamenti.');
     }
 
     /**
@@ -1052,7 +1140,7 @@ class MonitoringController extends Controller
             'second_reading_on' => ['nullable', 'date'],
             'operator_name' => ['nullable', 'string', 'max:120'],
             'sampled_operator_id' => ['nullable', 'integer', Rule::exists('sampling_operators', 'id')],
-            'operator_uniform' => ['nullable', Rule::in(SamplingOperator::UNIFORMS)],
+            'operator_uniform' => ['nullable', 'string', Rule::exists('sampling_uniforms', 'name')],
             'incubation_started_signature' => ['nullable', 'string', 'max:120'],
             'incubation_finished_signature' => ['nullable', 'string', 'max:120'],
             'cq_operator_name' => ['nullable', 'string', 'max:120'],
@@ -1170,6 +1258,22 @@ class MonitoringController extends Controller
         if (! $samplingSession) {
             throw ValidationException::withMessages([
                 'sampling_session_id' => 'Salva prima l\'intestazione della sessione.',
+            ]);
+        }
+
+        if ($this->sessionHasOnlyDeletedChecks($samplingSession->id)) {
+            throw ValidationException::withMessages([
+                'sampling_session_id' => 'La sessione eliminata deve essere ripristinata da un admin prima di essere modificata.',
+            ]);
+        }
+
+        $deletedSectionIds = $this->isPhasedEnvironment($section)
+            ? $this->deletedSessionSectionIds($samplingSession->id)
+            : [];
+        if (in_array($section->id, $deletedSectionIds, true)
+            || ($section->environment === 'operatori' && $deletedSectionIds !== [])) {
+            throw ValidationException::withMessages([
+                'sampling_session_id' => 'La registrazione eliminata deve essere ripristinata da un admin prima di essere modificata.',
             ]);
         }
 
@@ -1654,10 +1758,29 @@ class MonitoringController extends Controller
         return $readingNumber === 1 ? 'sampling' : 'reading_'.($readingNumber - 1);
     }
 
+    private function sessionHasOnlyDeletedChecks(string $sessionId): bool
+    {
+        return MicrobiologicalCheck::onlyTrashed()->where('sampling_session_id', $sessionId)->exists()
+            && ! MicrobiologicalCheck::query()->where('sampling_session_id', $sessionId)->exists();
+    }
+
+    private function deletedSessionSectionIds(string $sessionId): array
+    {
+        $checks = MicrobiologicalCheck::withTrashed()
+            ->where('sampling_session_id', $sessionId)
+            ->get(['monitoring_section_id', 'deleted_at']);
+
+        return $checks->whereNotNull('deleted_at')->pluck('monitoring_section_id')
+            ->diff($checks->whereNull('deleted_at')->pluck('monitoring_section_id'))
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
     private function samplingSessionHeaderIsLocked(string $sessionId): bool
     {
         if (SamplingSession::query()->whereKey($sessionId)->value('environment') === 'operatori') {
-            return MicrobiologicalCheck::query()
+            return MicrobiologicalCheck::withTrashed()
                 ->where('sampling_session_id', $sessionId)
                 ->exists();
         }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\MonitoringController;
+use App\Http\Controllers\OperatorCatalogController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -39,17 +40,26 @@ Route::middleware(['auth', 'role:operatore'])->group(function () {
         ->name('monitoraggi.checks.store');
     Route::patch('/monitoraggi/{section}/checks/{check}', [MonitoringController::class, 'updateCheck'])
         ->name('monitoraggi.checks.update');
-    Route::delete('/monitoraggi/checks/{check}', [MonitoringController::class, 'deleteCheck'])
-        ->name('monitoraggi.checks.delete');
 });
 
 // Accessibile solo da admin (gestione struttura)
 Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::post('/monitoraggi/operator-catalog/operators', [OperatorCatalogController::class, 'storeOperator'])->name('monitoraggi.operator-catalog.operators.store');
+    Route::delete('/monitoraggi/operator-catalog/operators', [OperatorCatalogController::class, 'deleteOperator'])->name('monitoraggi.operator-catalog.operators.delete');
+    Route::post('/monitoraggi/operator-catalog/uniforms', [OperatorCatalogController::class, 'storeUniform'])->name('monitoraggi.operator-catalog.uniforms.store');
+    Route::delete('/monitoraggi/operator-catalog/uniforms', [OperatorCatalogController::class, 'deleteUniform'])->name('monitoraggi.operator-catalog.uniforms.delete');
+    Route::post('/monitoraggi/operator-catalog/sections', [OperatorCatalogController::class, 'storeSection'])->name('monitoraggi.operator-catalog.sections.store');
+    Route::delete('/monitoraggi/operator-catalog/sections', [OperatorCatalogController::class, 'deleteSection'])->name('monitoraggi.operator-catalog.sections.delete');
+    Route::delete('/monitoraggi/checks/{check}', [MonitoringController::class, 'deleteCheck'])
+        ->name('monitoraggi.checks.delete');
     Route::post('/monitoraggi/checks/{check}/responsible-signature', [MonitoringController::class, 'signResponsible'])
         ->name('monitoraggi.checks.responsible-signature');
     Route::patch('/monitoraggi/checks/{check}/restore', [MonitoringController::class, 'restoreCheck'])
         ->withTrashed()
         ->name('monitoraggi.checks.restore');
+    Route::delete('/monitoraggi/checks/{check}/permanent', [MonitoringController::class, 'permanentlyDeleteSession'])
+        ->withTrashed()
+        ->name('monitoraggi.checks.permanent-delete');
     Route::post('/monitoraggi/sections', [MonitoringController::class, 'storeSection'])
         ->name('monitoraggi.sections.store');
     Route::patch('/monitoraggi/sections/{section}', [MonitoringController::class, 'updateSection'])

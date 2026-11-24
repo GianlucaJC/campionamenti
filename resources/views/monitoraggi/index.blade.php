@@ -1142,7 +1142,7 @@
                     <nav class="menu" aria-label="Menu amministrazione" style="margin-top: 0;">
                         @foreach ($adminMenuItems as $menuItem)
                             <a
-                                href="{{ route('monitoraggi.index', array_filter(['view' => $menuItem['key'], 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment])) }}"
+                                href="{{ route('monitoraggi.index', array_filter(['view' => $menuItem['key'], 'env' => $menuItem['key'] === 'gestione-operatori' ? 'operatori' : $currentEnvironment, 'sub' => $menuItem['key'] === 'gestione-operatori' ? null : $currentSubEnvironment])) }}"
                                 class="menu-link {{ $currentView === $menuItem['key'] ? 'active' : '' }}"
                             >
                                 {{ $menuItem['label'] }}
@@ -1386,6 +1386,13 @@
                                     @if (! $sessionCheck->trashed())
                                         <a class="archive-edit-button" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $sessionCheck->id, 'session' => $sessionCheck->sampling_session_id, 'operator_section' => $currentEnvironment === 'operatori' ? $sessionCheck->monitoring_section_id : null])) }}">Apri in modifica</a>
                                     @endif
+                                    @if ($sessionCheck->trashed())
+                                        @foreach ($sessionChecks as $sectionCheck)
+                                            @include('monitoraggi.partials.archive-check-actions', ['check' => $sectionCheck, 'showSectionName' => $sessionChecks->count() > 1])
+                                        @endforeach
+                                    @else
+                                        @include('monitoraggi.partials.archive-check-actions', ['check' => $sessionCheck, 'showSectionName' => false])
+                                    @endif
                                 </div>
                             @else
                             <div class="archive-section-tags">
@@ -1439,32 +1446,14 @@
                                     @endif
 
                                     <div class="actions" style="margin-top:8px;">
-                                        @if (auth()->user()?->isOperatore() && ! $check->trashed())
-                                            <form action="{{ route('monitoraggi.checks.delete', $check) }}" method="POST">
-                                                @csrf
-                                                @method('DELETE')
-                                                @if ($check->hasSignature())
-                                                    <label class="hint" for="delete_reason_{{ $check->id }}">Motivazione eliminazione</label>
-                                                    <input id="delete_reason_{{ $check->id }}" type="text" name="deletion_reason" maxlength="1000" required placeholder="Motivazione obbligatoria">
-                                                @endif
-                                                <a class="archive-delete-link" href="#" onclick="if (confirm('Confermi l\'eliminazione del campionamento? Un admin potra ripristinarlo.')) { this.closest('form').requestSubmit(); } return false;">{{ $check->hasSignature() ? 'Elimina con motivazione' : 'Elimina' }}</a>
-                                            </form>
-                                        @endif
                                         @if (auth()->user()?->isAdmin() && ! $check->trashed() && $phaseStatus[0] === 'waiting-responsible-signature')
                                             <form action="{{ route('monitoraggi.checks.responsible-signature', $check) }}" method="POST">
                                                 @csrf
                                                 <button type="submit" class="btn-small">Firma responsabile</button>
                                             </form>
                                         @endif
-                                        @if (auth()->user()?->isAdmin() && $check->trashed())
-                                            <form action="{{ route('monitoraggi.checks.restore', $check) }}" method="POST">
-                                                @csrf
-                                                @method('PATCH')
-                                                <button type="submit" class="btn-small">Ripristina</button>
-                                            </form>
-                                            <span class="hint">Eliminato da {{ $check->deletedBy?->name ?: '-' }} il {{ $check->deleted_at?->format('d-m-Y H:i') ?: '-' }}</span>
-                                        @endif
                                     </div>
+                                    @include('monitoraggi.partials.archive-check-actions', ['check' => $check, 'showSectionName' => false])
 
                                     @if ($currentEnvironment === 'acque')
                                         <div class="archive-water-meta">
@@ -1663,6 +1652,14 @@
                     <p class="hint" style="margin-top:14px;">Seleziona uno o piu punti di campionamento e aggiorna il grafico.</p>
                 @endif
             </article>
+        @endif
+
+        @if ($currentView === 'gestione-operatori' && auth()->user()?->isAdmin())
+            @if ($currentEnvironment === 'operatori')
+                @include('monitoraggi.partials.operator-catalog')
+            @else
+                <p class="hint">Le anagrafiche sono disponibili nell'ambiente Operatori.</p>
+            @endif
         @endif
 
         @if ($currentView === 'gestione-sezioni' && auth()->user()?->isAdmin())
@@ -2844,8 +2841,8 @@
                 <details class="section" open>
                     <summary>
                         <div>
-                            <p class="section-title">Nessuna sezione configurata</p>
-                            <p class="section-desc">Nessun template trovato per l'ambiente selezionato.</p>
+                            <p class="section-title">{{ $hasDeletedSessionSections ? 'Nessuna sezione disponibile' : 'Nessuna sezione configurata' }}</p>
+                            <p class="section-desc">{{ $hasDeletedSessionSections ? 'Le sezioni eliminate possono essere ripristinate da un admin nell’archivio.' : "Nessun template trovato per l'ambiente selezionato." }}</p>
                         </div>
                         <span class="badge">0 punti</span>
                     </summary>

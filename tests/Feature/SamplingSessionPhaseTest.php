@@ -7,6 +7,7 @@ use App\Models\MonitoringSection;
 use App\Models\SamplingOperator;
 use App\Models\SamplingPoint;
 use App\Models\SamplingSession;
+use App\Models\SamplingUniform;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
@@ -50,6 +51,7 @@ class SamplingSessionPhaseTest extends TestCase
             '2026_09_03_000029_add_sampling_session_id_to_microbiological_checks_table',
             '2026_09_03_000030_create_sampling_sessions_table',
             '2026_11_24_000001_add_operator_sampling_details',
+            '2026_11_24_000002_create_sampling_uniforms_table',
             '2026_11_12_000001_add_image_path_to_monitoring_sections_table',
             '2026_11_19_000001_add_water_analyses_to_sampling_points_table',
             '2026_11_19_000002_add_water_analysis_results_to_check_points_table',
@@ -443,6 +445,425 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertOk()
             ->assertSee('2 registrazioni')
             ->assertSee('Registrazione reparto');
+    }
+
+    public function test_admin_can_delete_a_whole_session_in_every_environment(): void
+    {
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        foreach (['produzione', 'clean_room', 'acque', 'operatori'] as $environment) {
+            $section = MonitoringSection::query()->create([
+                'code' => 'archive-'.$environment,
+                'name' => 'Sezione '.$environment,
+                'environment' => $environment,
+                'sub_environment' => $environment === 'clean_room' ? 's1' : null,
+                'is_active' => true,
+            ]);
+            $session = SamplingSession::query()->create([
+                'id' => (string) Str::uuid(),
+                'environment' => $environment,
+                'sub_environment' => $environment === 'clean_room' ? 's1' : null,
+                'header' => ['sampled_on' => '2026-11-24'],
+                'created_by_user_id' => $operator->id,
+            ]);
+            $check = MicrobiologicalCheck::query()->create([
+                'monitoring_section_id' => $section->id,
+                'sampling_session_id' => $session->id,
+                'sampled_on' => '2026-11-24',
+                'created_by_user_id' => $operator->id,
+            ]);
+            $otherSection = MonitoringSection::query()->create([
+                'code' => 'archive-other-'.$environment,
+                'name' => 'Altra sezione '.$environment,
+                'environment' => $environment,
+                'sub_environment' => $environment === 'clean_room' ? 's1' : null,
+                'is_active' => true,
+            ]);
+            $signedCheck = MicrobiologicalCheck::query()->create([
+                'monitoring_section_id' => $otherSection->id,
+                'sampling_session_id' => $session->id,
+                'sampled_on' => '2026-11-23',
+                'created_by_user_id' => $operator->id,
+            ]);
+            $signedCheck->phaseStates()->create([
+                'phase' => 'reading_1',
+                'signed_by_user_id' => $operator->id,
+                'signed_at' => now(),
+            ]);
+            $unrelated = MicrobiologicalCheck::query()->create([
+                'monitoring_section_id' => $section->id,
+                'sampled_on' => '2026-11-24',
+                'created_by_user_id' => $operator->id,
+            ]);
+            $previouslyDeleted = MicrobiologicalCheck::query()->create([
+                'monitoring_section_id' => $section->id,
+                'sampling_session_id' => $session->id,
+                'sampled_on' => '2026-11-22',
+                'created_by_user_id' => $operator->id,
+            ]);
+            $previouslyDeleted->delete();
+            $archive = ['view' => 'archivio', 'env' => $environment];
+
+            $this->actingAs($operator)->get(route('monitoraggi.index', $archive))
+                ->assertOk()
+                ->assertDontSee('action="'.route('monitoraggi.checks.delete', $check).'"', false)
+                ->assertDontSee('Gestione amministrativa');
+            $this->delete(route('monitoraggi.checks.delete', $check))->assertForbidden();
+            $this->actingAs($admin)->get(route('monitoraggi.index', $archive))
+                ->assertOk()
+                ->assertSee('Gestione amministrativa')
+                ->assertSee('action="'.route('monitoraggi.checks.delete', $check).'"', false)
+                ->assertSee('Elimina intera sessione');
+
+            $this->delete(route('monitoraggi.checks.delete', $check))
+                ->assertSessionHasErrors('deletion_reason');
+            $this->assertNotSoftDeleted($check);
+            $this->assertNotSoftDeleted($signedCheck);
+            $this->delete(route('monitoraggi.checks.delete', $check), ['deletion_reason' => 'Inserimento errato'])
+                ->assertSessionHasNoErrors();
+            $this->assertSoftDeleted($check);
+            $this->assertSoftDeleted($signedCheck);
+            $this->assertNotSoftDeleted($unrelated);
+            $this->assertDatabaseMissing('microbiological_check_phase_logs', [
+                'microbiological_check_id' => $previouslyDeleted->id,
+                'action' => 'soft_deleted',
+            ]);
+            $this->assertDatabaseHas('microbiological_check_phase_logs', [
+                'microbiological_check_id' => $check->id,
+                'action' => 'soft_deleted',
+                'reason' => 'Inserimento errato',
+                'performed_by_user_id' => $admin->id,
+            ]);
+            $this->assertDatabaseHas('microbiological_check_phase_logs', [
+                'microbiological_check_id' => $signedCheck->id,
+                'action' => 'soft_deleted',
+                'reason' => 'Inserimento errato',
+                'performed_by_user_id' => $admin->id,
+            ]);
+
+            $this->actingAs($operator)->get(route('monitoraggi.index', [
+                'view' => 'nuovo', 'env' => $environment, 'session' => $session->id,
+            ]))->assertOk()->assertSee('Le sezioni eliminate possono essere ripristinate da un admin');
+            $this->put(route('monitoraggi.sessions.update', $session), [
+                'sampling_session_id' => $session->id,
+                'environment' => $environment,
+                'sampled_on' => '2026-11-24',
+                'operator_section' => $section->id,
+            ])->assertSessionHasErrors('sampling_session_id');
+            $this->post(route('monitoraggi.checks.store', $section), [
+                'sampling_session_id' => $session->id,
+            ])->assertSessionHasErrors('sampling_session_id');
+
+            $this->actingAs($admin)->get(route('monitoraggi.index', $archive + ['archive_status' => 'deleted']))
+                ->assertOk()
+                ->assertSee('action="'.route('monitoraggi.checks.restore', $check).'"', false);
+            $this->patch(route('monitoraggi.checks.restore', $signedCheck))->assertSessionHasNoErrors();
+            $this->assertNotSoftDeleted($signedCheck);
+            $this->assertSoftDeleted($check);
+            $this->assertDatabaseHas('microbiological_check_phase_states', [
+                'microbiological_check_id' => $signedCheck->id,
+                'phase' => 'reading_1',
+                'signed_by_user_id' => $operator->id,
+            ]);
+        }
+    }
+
+    public function test_partially_restored_session_does_not_recreate_other_deleted_sections(): void
+    {
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'produzione',
+            'header' => ['sampled_on' => '2026-11-24'],
+            'created_by_user_id' => $operator->id,
+        ]);
+        $sections = collect(['A', 'B'])->map(fn ($name) => MonitoringSection::query()->create([
+            'code' => 'archive-section-'.$name,
+            'name' => 'Reparto '.$name,
+            'environment' => 'produzione',
+            'is_active' => true,
+        ]));
+        $checks = $sections->map(fn ($section) => MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $section->id,
+            'sampling_session_id' => $session->id,
+            'sampled_on' => '2026-11-24',
+            'created_by_user_id' => $operator->id,
+        ]));
+
+        $archive = $this->actingAs($admin)->get(route('monitoraggi.index', ['view' => 'archivio', 'env' => 'produzione']));
+        $this->assertSame(1, substr_count($archive->getContent(), 'Elimina intera sessione'));
+        $this->actingAs($admin)->delete(route('monitoraggi.checks.delete', $checks[0]))->assertSessionHasNoErrors();
+        $this->assertSoftDeleted($checks[0]);
+        $this->assertSoftDeleted($checks[1]);
+        $this->patch(route('monitoraggi.checks.restore', $checks[1]))->assertSessionHasNoErrors();
+
+        $this->actingAs($operator)->get(route('monitoraggi.index', ['view' => 'nuovo', 'env' => 'produzione', 'session' => $session->id]))
+            ->assertOk()
+            ->assertDontSee('data-batch-section-id="'.$sections[0]->id.'"', false)
+            ->assertSee('data-batch-section-id="'.$sections[1]->id.'"', false);
+        $this->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'sampling',
+            'checks' => [$sections[0]->id => [], $sections[1]->id => []],
+        ])->assertSessionHasErrors('checks');
+        $this->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'sampling',
+            'checks' => [$sections[1]->id => []],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(1, MicrobiologicalCheck::withTrashed()->where('sampling_session_id', $session->id)
+            ->where('monitoring_section_id', $sections[0]->id)->count());
+
+        $this->actingAs($admin)->patch(route('monitoraggi.checks.restore', $checks[0]))->assertSessionHasNoErrors();
+        $this->actingAs($operator)->get(route('monitoraggi.index', ['view' => 'nuovo', 'env' => 'produzione', 'session' => $session->id]))
+            ->assertSee('data-batch-section-id="'.$sections[0]->id.'"', false)
+            ->assertSee('data-batch-section-id="'.$sections[1]->id.'"', false);
+    }
+
+    public function test_deleted_operator_session_cannot_be_reused_before_restoration(): void
+    {
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $sections = collect(['A', 'B'])->map(fn ($name) => MonitoringSection::query()->create([
+            'code' => 'deleted-operator-'.$name,
+            'name' => 'Operatori - '.$name,
+            'environment' => 'operatori',
+            'is_active' => true,
+        ]));
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'operatori',
+            'header' => ['sampled_on' => '2026-11-24', 'operator_section' => $sections[0]->id],
+            'created_by_user_id' => $operator->id,
+        ]);
+        $check = MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $sections[0]->id,
+            'sampling_session_id' => $session->id,
+            'sampled_on' => '2026-11-24',
+            'created_by_user_id' => $operator->id,
+        ]);
+
+        $this->actingAs($admin)->delete(route('monitoraggi.checks.delete', $check))->assertSessionHasNoErrors();
+        $this->actingAs($operator)->get(route('monitoraggi.index', ['view' => 'nuovo', 'env' => 'operatori', 'session' => $session->id]))
+            ->assertOk()
+            ->assertSee('Le sezioni eliminate possono essere ripristinate da un admin')
+            ->assertDontSee('<div class="operator-section-panel"', false);
+        $this->put(route('monitoraggi.sessions.update', $session), [
+            'sampling_session_id' => $session->id,
+            'environment' => 'operatori',
+            'sampled_on' => '2026-11-24',
+            'operator_section' => $sections[1]->id,
+        ])->assertSessionHasErrors('sampling_session_id');
+        $this->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'sampling',
+            'operator_section' => $sections[0]->id,
+            'checks' => [$sections[0]->id => []],
+        ])->assertSessionHasErrors('sampling_session_id');
+        $this->post(route('monitoraggi.checks.store', $sections[1]), [
+            'sampling_session_id' => $session->id,
+        ])->assertSessionHasErrors('sampling_session_id');
+    }
+
+    public function test_restore_rejects_an_existing_active_check_for_the_same_session_section(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $section = MonitoringSection::query()->create([
+            'code' => 'restore-conflict',
+            'name' => 'Reparto',
+            'environment' => 'produzione',
+            'is_active' => true,
+        ]);
+        $sessionId = (string) Str::uuid();
+        $attributes = [
+            'monitoring_section_id' => $section->id,
+            'sampling_session_id' => $sessionId,
+            'sampled_on' => '2026-11-24',
+        ];
+        $deleted = MicrobiologicalCheck::query()->create($attributes);
+        $deleted->delete();
+        MicrobiologicalCheck::query()->create($attributes);
+
+        $this->actingAs($admin)->patch(route('monitoraggi.checks.restore', $deleted))
+            ->assertSessionHasErrors('check');
+        $this->assertSoftDeleted($deleted);
+    }
+
+    public function test_admin_can_delete_an_unsigned_legacy_check_without_a_session(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $section = MonitoringSection::query()->create([
+            'code' => 'legacy-delete',
+            'name' => 'Reparto storico',
+            'environment' => 'produzione',
+            'is_active' => true,
+        ]);
+        $check = MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $section->id,
+            'sampled_on' => '2026-11-24',
+        ]);
+
+        $this->actingAs($admin)->get(route('monitoraggi.index', ['view' => 'archivio', 'env' => 'produzione']))
+            ->assertSee('Elimina campionamento');
+        $this->delete(route('monitoraggi.checks.delete', $check))->assertSessionHasNoErrors();
+        $this->assertSoftDeleted($check);
+    }
+
+    public function test_admin_can_permanently_delete_a_whole_trashed_session(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $section = MonitoringSection::query()->create([
+            'code' => 'permanent-operator',
+            'name' => 'Operatori - Reparto',
+            'environment' => 'operatori',
+            'is_active' => true,
+        ]);
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'operatori',
+            'header' => ['sampled_on' => '2026-11-24'],
+            'created_by_user_id' => $operator->id,
+        ]);
+        $checks = collect([1, 2])->map(fn () => MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $section->id,
+            'sampling_session_id' => $session->id,
+            'sampled_on' => '2026-11-24',
+        ]));
+        $point = $section->samplingPoints()->create(['title' => 'Mano', 'sample_kind' => 'surface_contact']);
+        $result = $checks[0]->pointResults()->create(['sampling_point_id' => $point->id]);
+        $reading = $result->readings()->create(['reading_number' => 1, 'cfu_count' => 2]);
+        $state = $checks[0]->phaseStates()->create(['phase' => 'sampling', 'signed_by_user_id' => $operator->id, 'signed_at' => now()]);
+
+        $this->actingAs($admin)->delete(route('monitoraggi.checks.delete', $checks[0]), ['deletion_reason' => 'Dati di prova'])
+            ->assertSessionHasNoErrors();
+        $this->get(route('monitoraggi.index', ['view' => 'archivio', 'env' => 'operatori', 'archive_status' => 'deleted']))
+            ->assertSee('Eliminazione definitiva');
+        $this->actingAs($operator)->delete(route('monitoraggi.checks.permanent-delete', $checks[0]))->assertForbidden();
+
+        $this->actingAs($admin)->patch(route('monitoraggi.checks.restore', $checks[1]))->assertSessionHasNoErrors();
+        $this->delete(route('monitoraggi.checks.permanent-delete', $checks[0]))->assertSessionHasErrors('check');
+        $this->assertSoftDeleted($checks[0]);
+        $this->delete(route('monitoraggi.checks.delete', $checks[1]))->assertSessionHasNoErrors();
+        $this->delete(route('monitoraggi.checks.permanent-delete', $checks[0]))->assertSessionHasNoErrors();
+
+        foreach ($checks as $check) {
+            $this->assertDatabaseMissing('microbiological_checks', ['id' => $check->id]);
+            $this->assertDatabaseMissing('microbiological_check_phase_logs', ['microbiological_check_id' => $check->id]);
+        }
+        $this->assertDatabaseMissing('sampling_sessions', ['id' => $session->id]);
+        $this->assertDatabaseMissing('microbiological_check_points', ['id' => $result->id]);
+        $this->assertDatabaseMissing('microbiological_check_readings', ['id' => $reading->id]);
+        $this->assertDatabaseMissing('microbiological_check_phase_states', ['id' => $state->id]);
+        $this->assertDatabaseHas('sampling_points', ['id' => $point->id]);
+    }
+
+    public function test_operator_catalog_allows_admin_to_manage_unused_entries_and_copy_a_department(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $source = MonitoringSection::query()->create([
+            'code' => 'operator-source',
+            'name' => 'Operatori - Fonte',
+            'environment' => 'operatori',
+            'is_active' => true,
+        ]);
+        $department = $source->departments()->create(['name' => 'Operatori', 'readings_count' => 3, 'is_active' => true]);
+        $source->samplingPoints()->create([
+            'monitoring_department_id' => $department->id,
+            'title' => 'Mano',
+            'sample_kind' => 'surface_contact',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($operator)->post(route('monitoraggi.operator-catalog.uniforms.store'), ['name' => 'Test'])->assertForbidden();
+        $this->delete(route('monitoraggi.operator-catalog.sections.delete'), ['section_id' => $source->id])->assertForbidden();
+        $this->actingAs($admin)->get(route('monitoraggi.index', ['view' => 'gestione-operatori', 'env' => 'operatori']))
+            ->assertOk()->assertSee('Anagrafiche operatori')->assertSee('Copia punti e configurazione da');
+        $this->get(route('monitoraggi.index', ['view' => 'nuovo', 'env' => 'produzione']))
+            ->assertSee(route('monitoraggi.index', ['view' => 'gestione-operatori', 'env' => 'operatori']));
+        $this->post(route('monitoraggi.operator-catalog.uniforms.store'), ['name' => 'Divisa nuova'])->assertSessionHasNoErrors();
+        $this->post(route('monitoraggi.operator-catalog.uniforms.store'), ['name' => 'DIVISA NUOVA'])->assertSessionHasErrors('name');
+        $this->post(route('monitoraggi.operator-catalog.operators.store'), ['name' => 'Operatore nuovo'])->assertSessionHasNoErrors();
+        $this->post(route('monitoraggi.operator-catalog.operators.store'), ['name' => 'OPERATORE NUOVO'])->assertSessionHasErrors('name');
+        $this->post(route('monitoraggi.operator-catalog.sections.store'), [
+            'name' => 'Nuovo',
+            'source_section_id' => $source->id,
+        ])->assertSessionHasNoErrors();
+        $copy = MonitoringSection::query()->where('name', 'Operatori - Nuovo')->firstOrFail();
+        $copiedDepartment = $copy->departments()->firstOrFail();
+        $this->assertSame(3, $copiedDepartment->readings_count);
+        $this->assertDatabaseHas('sampling_points', [
+            'monitoring_section_id' => $copy->id,
+            'monitoring_department_id' => $copiedDepartment->id,
+            'title' => 'Mano',
+        ]);
+        $this->post(route('monitoraggi.operator-catalog.sections.store'), [
+            'name' => 'NUOVO',
+            'source_section_id' => $source->id,
+        ])->assertSessionHasErrors('name');
+        $this->actingAs($operator)->get(route('monitoraggi.index', ['env' => 'operatori']))
+            ->assertSee('Divisa nuova')->assertSee('Operatore nuovo')->assertSee('Nuovo');
+        $sessionId = (string) Str::uuid();
+        $newOperator = SamplingOperator::query()->where('name', 'Operatore nuovo')->firstOrFail();
+        $this->put(route('monitoraggi.sessions.update', $sessionId), [
+            'sampling_session_id' => $sessionId,
+            'environment' => 'operatori',
+            'sampled_on' => '2026-11-24',
+            'operator_section' => $copy->id,
+            'sampled_operator_id' => $newOperator->id,
+            'operator_uniform' => 'Divisa nuova',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('Divisa nuova', SamplingSession::query()->findOrFail($sessionId)->header['operator_uniform']);
+        SamplingSession::query()->whereKey($sessionId)->delete();
+
+        $this->actingAs($admin)->delete(route('monitoraggi.operator-catalog.uniforms.delete'), [
+            'uniform_id' => SamplingUniform::query()->where('name', 'Divisa nuova')->firstOrFail()->id,
+        ])->assertSessionHasNoErrors();
+        $this->delete(route('monitoraggi.operator-catalog.operators.delete'), [
+            'operator_id' => SamplingOperator::query()->where('name', 'Operatore nuovo')->firstOrFail()->id,
+        ])->assertSessionHasNoErrors();
+        $this->delete(route('monitoraggi.operator-catalog.sections.delete'), ['section_id' => $copy->id])->assertSessionHasNoErrors();
+        $this->assertDatabaseMissing('sampling_uniforms', ['name' => 'Divisa nuova']);
+        $this->assertDatabaseMissing('sampling_operators', ['name' => 'Operatore nuovo']);
+        $this->assertDatabaseMissing('monitoring_sections', ['id' => $copy->id]);
+        $this->assertDatabaseMissing('sampling_points', ['monitoring_section_id' => $copy->id]);
+    }
+
+    public function test_operator_catalog_refuses_to_delete_used_entries(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $operator = SamplingOperator::query()->firstOrFail();
+        $uniform = SamplingUniform::query()->firstOrFail();
+        $section = MonitoringSection::query()->create([
+            'code' => 'operator-in-use',
+            'name' => 'Operatori - Usato',
+            'environment' => 'operatori',
+            'is_active' => true,
+        ]);
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'operatori',
+            'header' => ['sampled_operator_id' => (string) $operator->id, 'operator_uniform' => $uniform->name, 'operator_section' => $section->id],
+        ]);
+        $this->actingAs($admin)->delete(route('monitoraggi.operator-catalog.operators.delete'), ['operator_id' => $operator->id])->assertSessionHasErrors('operator_id');
+        $this->delete(route('monitoraggi.operator-catalog.uniforms.delete'), ['uniform_id' => $uniform->id])->assertSessionHasErrors('uniform_id');
+        $this->delete(route('monitoraggi.operator-catalog.sections.delete'), ['section_id' => $section->id])->assertSessionHasErrors('section_id');
+
+        $check = MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $section->id,
+            'sampling_session_id' => $session->id,
+            'sampled_on' => '2026-11-24',
+            'sampled_operator_id' => $operator->id,
+            'operator_uniform' => $uniform->name,
+        ]);
+        $check->delete();
+        $session->delete();
+        $this->delete(route('monitoraggi.operator-catalog.operators.delete'), ['operator_id' => $operator->id])->assertSessionHasErrors('operator_id');
+        $this->delete(route('monitoraggi.operator-catalog.uniforms.delete'), ['uniform_id' => $uniform->id])->assertSessionHasErrors('uniform_id');
+        $this->delete(route('monitoraggi.operator-catalog.sections.delete'), ['section_id' => $section->id])->assertSessionHasErrors('section_id');
+        $this->assertDatabaseHas('sampling_operators', ['id' => $operator->id]);
+        $this->assertDatabaseHas('sampling_uniforms', ['id' => $uniform->id]);
+        $this->assertDatabaseHas('monitoring_sections', ['id' => $section->id]);
     }
 
     public function test_clean_room_product_batch_is_shared_with_existing_and_new_checks(): void
