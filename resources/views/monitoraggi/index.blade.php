@@ -2814,15 +2814,15 @@
                                     </div>
                                 @endif
                             </form>
-                            @if ($isOperatorSectionPicker && $section->id === $operatorSectionId && $samplingSession && $sectionSupportsProductionPhase)
-                                <form id="session-phase-actions" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form data-session-has-editable-sections="{{ $sessionPhaseHasEditableSections ? 'true' : 'false' }}">
+                            @if ($isOperatorSectionPicker && $samplingSession && $sectionSupportsProductionPhase)
+                                <form action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form data-session-has-editable-sections="{{ ! $productionPhaseLocked ? 'true' : 'false' }}">
                                     @csrf
                                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
-                                    <input type="hidden" name="operator_section" value="{{ $operatorSectionId }}">
+                                    <input type="hidden" name="operator_section" value="{{ $section->id }}">
                                     <p class="hint">Salvataggio della fase per il reparto selezionato.</p>
                                     <div class="field" data-session-reopen-reason hidden>
-                                        <label for="session_reopening_reason">Motivazione riapertura</label>
-                                        <textarea id="session_reopening_reason" name="reopening_reason" maxlength="1000"></textarea>
+                                        <label for="session_reopening_reason_{{ $section->id }}">Motivazione riapertura</label>
+                                        <textarea id="session_reopening_reason_{{ $section->id }}" name="reopening_reason" maxlength="1000"></textarea>
                                     </div>
                                     <button type="submit" data-session-save>Salva {{ $productionPhases[$productionPhase] }}</button>
                                     <button type="submit" name="sign_phase" value="1" data-session-sign>Firma {{ $productionPhases[$productionPhase] }}</button>
@@ -2857,23 +2857,28 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var operatorSectionSelect = document.querySelector('[data-operator-section-select]');
+        document.querySelectorAll('[data-operator-section-select]').forEach(function (select) {
+            select.addEventListener('change', function () {
+                var currentPanel = select.closest('[data-operator-section-panel]');
+                var nextPanel = document.querySelector('[data-operator-section-panel="' + select.value + '"]');
+                var currentForm = select.form;
+                var nextForm = nextPanel.querySelector('.operator-session-form');
 
-        if (operatorSectionSelect) {
-            operatorSectionSelect.addEventListener('change', function () {
-                var url = new URL(window.location.href);
-                url.searchParams.set('operator_section', operatorSectionSelect.value);
-                url.searchParams.set('session', operatorSectionSelect.dataset.sessionId);
-                url.searchParams.delete('edit_check');
-                window.location.assign(url.toString());
+                Array.from(currentForm.elements).forEach(function (field) {
+                    if (field.name && nextForm.elements[field.name] && field.name !== '_token' && field.name !== '_method') {
+                        nextForm.elements[field.name].value = field.value;
+                    }
+                });
+
+                currentPanel.hidden = true;
+                nextPanel.hidden = false;
             });
-        }
+        });
 
-        var sessionPhaseForm = document.querySelector('[data-session-phase-form]');
-
-        if (sessionPhaseForm) {
-            var editableSectionForms = document.querySelectorAll('[data-batch-section-id]');
-            var reopenableSectionForms = document.querySelectorAll('[data-batch-reopen-section-id]');
+        document.querySelectorAll('[data-session-phase-form]').forEach(function (sessionPhaseForm) {
+            var sectionScope = sessionPhaseForm.closest('[data-operator-section-panel]') || document;
+            var editableSectionForms = sectionScope.querySelectorAll('[data-batch-section-id]');
+            var reopenableSectionForms = sectionScope.querySelectorAll('[data-batch-reopen-section-id]');
             var saveButton = sessionPhaseForm.querySelector('[data-session-save]');
             var signButton = sessionPhaseForm.querySelector('[data-session-sign]');
             var reopenButton = sessionPhaseForm.querySelector('[data-session-reopen]');
@@ -2897,7 +2902,7 @@
 
             sessionPhaseForm.addEventListener('submit', function (event) {
                 var isReopening = event.submitter && event.submitter.name === 'reopen_phase';
-                var sectionForms = Array.from(document.querySelectorAll(
+                var sectionForms = Array.from(sectionScope.querySelectorAll(
                     isReopening ? '[data-batch-reopen-section-id]' : '[data-batch-section-id]'
                 ));
 
@@ -2973,7 +2978,7 @@
 
                 sessionPhaseForm.submit();
             });
-        }
+        });
 
         var serverTime = document.body.dataset.serverTime;
 

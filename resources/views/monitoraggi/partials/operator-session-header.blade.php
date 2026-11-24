@@ -8,7 +8,7 @@
     <fieldset @disabled($samplingSessionHeaderLocked) style="display: contents;">
         <div class="field">
             <label for="session_operator_section_{{ $section->id }}">Reparto</label>
-            <select id="session_operator_section_{{ $section->id }}" name="operator_section" data-operator-section-select data-session-id="{{ $samplingSessionId }}">
+            <select id="session_operator_section_{{ $section->id }}" name="operator_section" data-operator-section-select>
                 @foreach ($operatorSections as $operatorSection)
                     <option value="{{ $operatorSection->id }}" @selected($operatorSectionId === (int) $operatorSection->id)>{{ str_replace('Operatori - ', '', $operatorSection->name) }}</option>
                 @endforeach

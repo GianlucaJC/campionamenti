@@ -337,9 +337,14 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertDontSee('Firma campionatore')
             ->assertDontSee('Inizio incubazione');
         $page = $response->getContent();
-        $this->assertSame(1, substr_count($page, 'id="session-phase-actions"'));
-        $this->assertSame(1, substr_count($page, 'data-batch-section-id='));
-        $this->assertGreaterThan(strpos($page, 'name="sampled_operator_id"'), strpos($page, 'id="session-phase-actions"'));
+        $this->assertSame(2, substr_count($page, 'data-session-phase-form data-session-has-editable-sections='));
+        $this->assertSame(2, substr_count($page, 'data-batch-section-id='));
+        $this->assertGreaterThan(strpos($page, 'name="sampled_operator_id"'), strpos($page, 'data-session-phase-form data-session-has-editable-sections='));
+        foreach ($sections as $section) {
+            $response->assertSee('data-operator-section-panel="'.$section->id.'"', false)
+                ->assertSee('name="operator_section" value="'.$section->id.'"', false)
+                ->assertSee('data-batch-section-id="'.$section->id.'"', false);
+        }
 
         $header = [
             'sampling_session_id' => $session->id,
