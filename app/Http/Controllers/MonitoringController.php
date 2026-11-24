@@ -9,6 +9,7 @@ use App\Models\MicrobiologicalCheckPoint;
 use App\Models\MonitoringDepartment;
 use App\Models\MonitoringSection;
 use App\Models\SamplingPoint;
+use App\Models\SamplingOperator;
 use App\Models\SamplingSession;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -130,6 +131,9 @@ class MonitoringController extends Controller
         if (! $availableEnvironments->contains($currentEnvironment)) {
             $currentEnvironment = (string) $availableEnvironments->first();
         }
+        $samplingOperators = $currentEnvironment === 'operatori' && $currentView === 'nuovo'
+            ? SamplingOperator::query()->orderBy('name')->get()
+            : collect();
 
         $availableSubEnvironments = collect($subEnvironmentLabels[$currentEnvironment] ?? []);
         $currentSubEnvironment = null;
@@ -509,6 +513,7 @@ class MonitoringController extends Controller
             'trendAvailablePoints' => $trendAvailablePoints,
             'trendPointIds' => $trendPointIds,
             'trendSeries' => $trendSeries,
+            'samplingOperators' => $samplingOperators,
         ]);
     }
 
@@ -545,6 +550,11 @@ class MonitoringController extends Controller
                 'monitoring_section_id' => $section->id,
                 'sampling_session_id' => $samplingSessionId,
                 'sampled_on' => $data['sampled_on'],
+                'product_batch' => in_array($section->environment, ['clean_room', 'operatori'], true) ? ($data['product_batch'] ?? null) : null,
+                'media_lot' => $section->environment === 'operatori' ? ($data['media_lot'] ?? null) : null,
+                'cq_operator_name' => $section->environment === 'operatori' ? ($data['cq_operator_name'] ?? null) : null,
+                'sampled_operator_id' => $section->environment === 'operatori' ? ($data['sampled_operator_id'] ?? null) : null,
+                'operator_uniform' => $section->environment === 'operatori' ? ($data['operator_uniform'] ?? null) : null,
                 'created_by_user_id' => $userId,
             ]);
 
@@ -578,6 +588,14 @@ class MonitoringController extends Controller
         $rules = $this->buildCheckRules(collect());
         unset($rules['points']);
         $rules['sampling_session_id'] = ['required', 'uuid'];
+        $environment = (string) $request->input('environment');
+        if ($environment === 'operatori') {
+            $rules['operator_section'] = [
+                'required',
+                'integer',
+                Rule::exists('monitoring_sections', 'id')->where('environment', 'operatori')->where('is_active', true),
+            ];
+        }
         $data = $request->validate($rules);
 
         if ($data['sampling_session_id'] !== $session) {
@@ -586,11 +604,12 @@ class MonitoringController extends Controller
 
         if ($this->samplingSessionHeaderIsLocked($session)) {
             return redirect()->back()->withErrors([
-                'sampling_session_id' => 'L’intestazione non puo essere modificata dopo la firma del campionamento.',
+                'sampling_session_id' => $environment === 'operatori'
+                    ? 'L’intestazione non puo essere modificata dopo il salvataggio della fase di campionamento.'
+                    : 'L’intestazione non puo essere modificata dopo la firma del campionamento.',
             ]);
         }
 
-        $environment = (string) $request->input('environment');
         $subEnvironment = $request->input('sub_environment') ?: null;
 
         $header = $this->checkHeaderPayload($data);
@@ -599,6 +618,20 @@ class MonitoringController extends Controller
             $header = array_intersect_key($header, array_flip(self::WATER_SESSION_FIELDS));
             $existingSession = SamplingSession::query()->find($session);
             $sessionHeader = array_merge($existingSession?->header ?? [], $header);
+        } elseif ($environment === 'operatori') {
+            $operatorHeaderFields = [
+                'sampled_on',
+                'cq_operator_name',
+                'product_batch',
+                'media_lot',
+                'sampled_operator_id',
+                'operator_uniform',
+            ];
+            $header = array_intersect_key($header, array_flip($operatorHeaderFields));
+            $existingSession = SamplingSession::query()->find($session);
+            $sessionHeader = array_merge($existingSession?->header ?? [], $header, [
+                'operator_section' => (int) $data['operator_section'],
+            ]);
         }
 
         SamplingSession::query()->updateOrCreate(
@@ -620,16 +653,40 @@ class MonitoringController extends Controller
             'env' => $environment,
             'sub' => $subEnvironment,
             'session' => $session,
+            'operator_section' => $environment === 'operatori' ? $request->input('operator_section') : null,
         ]))->with('status', 'Intestazione della sessione salvata.');
     }
 
     /**
-     * Save the active production phase for every section in a sampling session.
+     * Save a sampling phase for a session, scoped to one section for operators.
      */
     public function updateSamplingSessionPhase(Request $request, SamplingSession $session): RedirectResponse
     {
         if (! $request->user() || ! $request->user()->isOperatore()) {
             abort(403, 'Solo un operatore puo compilare il campionamento.');
+        }
+
+        $operatorSectionId = null;
+        if ($session->environment === 'operatori') {
+            $operatorSectionId = (int) ($session->header['operator_section'] ?? 0);
+            if (! $operatorSectionId) {
+                throw ValidationException::withMessages([
+                    'operator_section' => 'Salva l’intestazione e seleziona un reparto prima di compilare la fase.',
+                ]);
+            }
+
+            $request->validate([
+                'operator_section' => ['required', 'integer', Rule::in([$operatorSectionId])],
+            ]);
+
+            if (MicrobiologicalCheck::query()
+                ->where('sampling_session_id', $session->id)
+                ->where('monitoring_section_id', '!=', $operatorSectionId)
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'checks' => 'Questa registrazione contiene già dati di più reparti e non può essere modificata come una singola registrazione.',
+                ]);
+            }
         }
 
         $phase = (string) $request->validate([
@@ -641,9 +698,15 @@ class MonitoringController extends Controller
         ])['entry_phase'];
         $checksInput = $request->input('checks');
         $isReopening = $request->boolean('reopen_phase');
+        if ($operatorSectionId && array_diff(array_map('intval', array_keys($checksInput)), [$operatorSectionId])) {
+            throw ValidationException::withMessages([
+                'checks' => 'Ogni registrazione Operatori può contenere dati di un solo reparto.',
+            ]);
+        }
 
         $sections = MonitoringSection::query()
             ->where('is_active', true)
+            ->when($operatorSectionId, fn ($query) => $query->whereKey($operatorSectionId))
             ->where(function ($query) use ($session): void {
                 $query->where('environment', $session->environment);
 
@@ -690,8 +753,12 @@ class MonitoringController extends Controller
         if ($sections->isEmpty()) {
             return redirect()->back()->withErrors([
                 'entry_phase' => $isReopening
-                    ? 'Non ci sono sezioni firmate da te da riaprire per la fase selezionata.'
-                    : 'La fase selezionata è già firmata per tutte le sezioni della sessione. Riapri la sezione da modificare.',
+                    ? ($operatorSectionId
+                        ? 'Non ci sono firme tue per il reparto selezionato da riaprire.'
+                        : 'Non ci sono sezioni firmate da te da riaprire per la fase selezionata.')
+                    : ($operatorSectionId
+                        ? 'La fase selezionata è già firmata per il reparto. Riaprilo per modificarlo.'
+                        : 'La fase selezionata è già firmata per tutte le sezioni della sessione. Riapri la sezione da modificare.'),
             ]);
         }
 
@@ -734,6 +801,11 @@ class MonitoringController extends Controller
                         'monitoring_section_id' => $section->id,
                         'sampling_session_id' => $session->id,
                         'sampled_on' => $data['sampled_on'],
+                        'product_batch' => in_array($section->environment, ['clean_room', 'operatori'], true) ? ($data['product_batch'] ?? null) : null,
+                        'media_lot' => $section->environment === 'operatori' ? ($data['media_lot'] ?? null) : null,
+                        'cq_operator_name' => $section->environment === 'operatori' ? ($data['cq_operator_name'] ?? null) : null,
+                        'sampled_operator_id' => $section->environment === 'operatori' ? ($data['sampled_operator_id'] ?? null) : null,
+                        'operator_uniform' => $section->environment === 'operatori' ? ($data['operator_uniform'] ?? null) : null,
                         'created_by_user_id' => $userId,
                     ]);
                 }
@@ -761,7 +833,10 @@ class MonitoringController extends Controller
             'phase' => $phase,
             'edit_check' => $firstCheckId,
             'session' => $session->id,
-        ]))->with('status', 'Fase salvata per tutti i reparti della sessione.');
+            'operator_section' => $operatorSectionId,
+        ]))->with('status', $operatorSectionId
+            ? 'Fase salvata per il reparto selezionato.'
+            : 'Fase salvata per tutti i reparti della sessione.');
     }
 
     /**
@@ -976,6 +1051,8 @@ class MonitoringController extends Controller
             'first_reading_on' => ['nullable', 'date'],
             'second_reading_on' => ['nullable', 'date'],
             'operator_name' => ['nullable', 'string', 'max:120'],
+            'sampled_operator_id' => ['nullable', 'integer', Rule::exists('sampling_operators', 'id')],
+            'operator_uniform' => ['nullable', Rule::in(SamplingOperator::UNIFORMS)],
             'incubation_started_signature' => ['nullable', 'string', 'max:120'],
             'incubation_finished_signature' => ['nullable', 'string', 'max:120'],
             'cq_operator_name' => ['nullable', 'string', 'max:120'],
@@ -1094,6 +1171,20 @@ class MonitoringController extends Controller
             throw ValidationException::withMessages([
                 'sampling_session_id' => 'Salva prima l\'intestazione della sessione.',
             ]);
+        }
+
+        if ($section->environment === 'operatori') {
+            if ((int) ($samplingSession->header['operator_section'] ?? 0) !== (int) $section->id) {
+                throw ValidationException::withMessages([
+                    'sampling_session_id' => 'Il reparto della registrazione non corrisponde al reparto selezionato nell’intestazione.',
+                ]);
+            }
+
+            if (MicrobiologicalCheck::query()->where('sampling_session_id', $samplingSession->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'sampling_session_id' => 'Per questo reparto esiste già una registrazione associata alla sessione.',
+                ]);
+            }
         }
 
         return $samplingSession;
@@ -1307,6 +1398,8 @@ class MonitoringController extends Controller
             'sampled_time' => $data['sampled_time'] ?? null,
             'incubation_started_on' => $data['incubation_started_on'] ?? null,
             'operator_name' => $data['operator_name'] ?? null,
+            'sampled_operator_id' => $data['sampled_operator_id'] ?? null,
+            'operator_uniform' => $data['operator_uniform'] ?? null,
             'incubation_started_signature' => $data['incubation_started_signature'] ?? null,
             'incubation_finished_signature' => $data['incubation_finished_signature'] ?? null,
             'cq_operator_name' => $data['cq_operator_name'] ?? null,
@@ -1409,6 +1502,8 @@ class MonitoringController extends Controller
             $hasValue = collect($pointInput)
                 ->filter(fn ($value) => $value !== null && $value !== '')
                 ->isNotEmpty();
+            $isOperatorSampling = $check->section?->environment === 'operatori'
+                && ($data['entry_phase'] ?? null) === 'sampling';
 
             /** @var MicrobiologicalCheckPoint|null $existingResult */
             $existingResult = $existingResults->get($point->id);
@@ -1417,7 +1512,7 @@ class MonitoringController extends Controller
                 continue;
             }
 
-            if (! $hasValue && (! $isWater || ! $existingResult || $pointInput === [])) {
+            if (! $hasValue && ! $isOperatorSampling && (! $isWater || ! $existingResult || $pointInput === [])) {
                 if ($existingResult && empty($data['entry_phase']) && ! $isWater) {
                     $existingResult->delete();
                 }
@@ -1561,6 +1656,12 @@ class MonitoringController extends Controller
 
     private function samplingSessionHeaderIsLocked(string $sessionId): bool
     {
+        if (SamplingSession::query()->whereKey($sessionId)->value('environment') === 'operatori') {
+            return MicrobiologicalCheck::query()
+                ->where('sampling_session_id', $sessionId)
+                ->exists();
+        }
+
         return MicrobiologicalCheck::query()
             ->where('sampling_session_id', $sessionId)
             ->whereHas('phaseStates', function ($query): void {

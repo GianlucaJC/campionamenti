@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\MicrobiologicalCheck;
 use App\Models\MonitoringSection;
+use App\Models\SamplingOperator;
 use App\Models\SamplingPoint;
 use App\Models\SamplingSession;
 use App\Models\User;
@@ -48,6 +49,7 @@ class SamplingSessionPhaseTest extends TestCase
             '2026_07_29_000027_add_soft_deletes_to_monitoring_departments_table',
             '2026_09_03_000029_add_sampling_session_id_to_microbiological_checks_table',
             '2026_09_03_000030_create_sampling_sessions_table',
+            '2026_11_24_000001_add_operator_sampling_details',
             '2026_11_12_000001_add_image_path_to_monitoring_sections_table',
             '2026_11_19_000001_add_water_analyses_to_sampling_points_table',
             '2026_11_19_000002_add_water_analysis_results_to_check_points_table',
@@ -267,7 +269,209 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertOk();
         $response->assertSee('id="session_media_lot"', false)
             ->assertSee('id="session_swab_lot"', false)
+            ->assertDontSee('id="session_product_batch"', false)
             ->assertDontSee('id="session_membrane_lot"', false);
+    }
+
+    public function test_operator_sampling_uses_one_section_picker_and_saves_operator_details(): void
+    {
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'operatori',
+            'header' => ['sampled_on' => '2026-11-24'],
+            'created_by_user_id' => $operator->id,
+        ]);
+        $sections = collect(['Enteropluri-Test', 'Slide'])->map(function (string $name): MonitoringSection {
+            $section = MonitoringSection::query()->create([
+                'code' => str_replace('-', '_', strtolower($name)),
+                'name' => 'Operatori - '.$name,
+                'environment' => 'operatori',
+                'is_active' => true,
+            ]);
+            $section->samplingPoints()->create([
+                'legacy_code' => '501',
+                'title' => 'Mano destra',
+                'sample_kind' => 'surface_contact',
+                'requires_operational_status' => false,
+                'requires_product_lot' => false,
+                'is_active' => true,
+            ]);
+
+            return $section;
+        });
+        $sampledOperator = SamplingOperator::query()->where('name', 'PAMELA ASSOGNA')->firstOrFail();
+
+        $response = $this->actingAs($operator)->get(route('monitoraggi.index', [
+            'view' => 'nuovo',
+            'env' => 'operatori',
+            'session' => $session->id,
+        ]))->assertOk();
+        $response->assertSee('data-operator-section-select', false)
+            ->assertSee('name="operator_section"', false)
+            ->assertSee('Operatore campionato')
+            ->assertSee('Divisa indossata')
+            ->assertSee('Tuta blu')
+            ->assertSee('PAMELA ASSOGNA')
+            ->assertSee('name="notes" value=""', false)
+            ->assertDontSee('Visualizza firme')
+            ->assertDontSee('<details class="section"', false)
+            ->assertDontSee('Firma campionatore')
+            ->assertDontSee('Inizio incubazione');
+        $page = $response->getContent();
+        $this->assertSame(1, substr_count($page, 'id="session-phase-actions"'));
+        $this->assertSame(1, substr_count($page, 'data-batch-section-id='));
+        $this->assertGreaterThan(strpos($page, 'name="sampled_operator_id"'), strpos($page, 'id="session-phase-actions"'));
+
+        $header = [
+            'sampling_session_id' => $session->id,
+            'environment' => 'operatori',
+            'sampled_on' => '2026-11-24',
+            'cq_operator_name' => 'Operatore CQ',
+            'media_lot' => 'PL-123',
+            'product_batch' => 'LOT-456',
+            'sampled_operator_id' => $sampledOperator->id,
+            'operator_uniform' => 'Tuta blu',
+            'operator_section' => $sections->last()->id,
+        ];
+        $this->put(route('monitoraggi.sessions.update', $session), $header)->assertSessionHasNoErrors();
+        $this->assertSame($sections->last()->id, $session->fresh()->header['operator_section']);
+
+        $this->post(route('monitoraggi.checks.store', $sections->first()), [
+            'sampling_session_id' => $session->id,
+        ])->assertSessionHasErrors('sampling_session_id');
+
+        $this->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'sampling',
+            'operator_section' => $sections->last()->id,
+            'checks' => $sections->mapWithKeys(fn (MonitoringSection $section): array => [$section->id => []])->all(),
+        ])->assertSessionHasErrors('checks');
+
+        $this->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'sampling',
+            'operator_section' => $sections->last()->id,
+            'checks' => [$sections->last()->id => []],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(0, $sections->first()->checks()->count());
+        $check = $sections->last()->checks()->firstOrFail();
+        $this->assertSame($session->id, $check->sampling_session_id);
+        $this->assertSame($sampledOperator->id, $check->sampled_operator_id);
+        $this->assertSame('Tuta blu', $check->operator_uniform);
+        $this->assertSame('PL-123', $check->media_lot);
+        $this->assertSame('LOT-456', $check->product_batch);
+        $this->assertSame('Operatore CQ', $check->cq_operator_name);
+        $this->assertSame(1, $check->pointResults()->count());
+        $this->post(route('monitoraggi.checks.store', $sections->last()), [
+            'sampling_session_id' => $session->id,
+        ])->assertSessionHasErrors('sampling_session_id');
+
+        $this->assertSame($sampledOperator->id, $session->fresh()->header['sampled_operator_id']);
+        $this->assertSame('Tuta blu', $session->fresh()->header['operator_uniform']);
+        $this->put(route('monitoraggi.sessions.update', $session), array_merge($header, [
+            'operator_section' => $sections->first()->id,
+            'media_lot' => 'MODIFIED',
+        ]))->assertSessionHasErrors('sampling_session_id');
+        $this->assertSame($sections->last()->id, $session->fresh()->header['operator_section']);
+        $this->assertSame('PL-123', $session->fresh()->header['media_lot']);
+        $this->get(route('monitoraggi.index', [
+            'view' => 'nuovo',
+            'env' => 'operatori',
+            'phase' => 'reading_1',
+            'session' => $session->id,
+            'operator_section' => $sections->first()->id,
+        ]))->assertOk()
+            ->assertSee('Intestazione e reparto bloccati dopo il salvataggio della fase di campionamento.')
+            ->assertSee('<fieldset disabled', false);
+
+        $this->get(route('monitoraggi.index', [
+            'view' => 'nuovo',
+            'env' => 'operatori',
+            'phase' => 'reading_1',
+            'session' => $session->id,
+            'operator_section' => $sections->last()->id,
+        ]))->assertOk()
+            ->assertSee('UFC Piastra 1a Lettura')
+            ->assertSee('Mano destra (1)')
+            ->assertDontSee('<details class="section"', false);
+
+        $secondSession = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(),
+            'environment' => 'operatori',
+            'header' => ['sampled_on' => '2026-11-24'],
+            'created_by_user_id' => $operator->id,
+        ]);
+        $secondHeader = array_merge($header, [
+            'sampling_session_id' => $secondSession->id,
+            'operator_section' => $sections->first()->id,
+        ]);
+        $this->put(route('monitoraggi.sessions.update', $secondSession), $secondHeader)->assertSessionHasNoErrors();
+        $this->post(route('monitoraggi.sessions.phase.update', $secondSession), [
+            'entry_phase' => 'sampling',
+            'operator_section' => $sections->first()->id,
+            'checks' => [$sections->first()->id => []],
+        ])->assertSessionHasNoErrors();
+
+        $firstDepartmentCheck = $sections->first()->checks()->firstOrFail();
+        $this->assertSame($secondSession->id, $firstDepartmentCheck->sampling_session_id);
+        $this->assertNotSame($check->sampling_session_id, $firstDepartmentCheck->sampling_session_id);
+
+        $this->get(route('monitoraggi.index', ['view' => 'archivio', 'env' => 'operatori']))
+            ->assertOk()
+            ->assertSee('2 registrazioni')
+            ->assertSee('Registrazione reparto');
+    }
+
+    public function test_clean_room_product_batch_is_shared_with_existing_and_new_checks(): void
+    {
+        $operator = User::factory()->create(['role' => 'operatore']);
+        $session = SamplingSession::query()->create([
+            'id' => (string) Str::uuid(), 'environment' => 'clean_room', 'sub_environment' => 's1',
+            'header' => ['sampled_on' => '2026-11-19'], 'created_by_user_id' => $operator->id,
+        ]);
+        $sections = [];
+        foreach (['existing', 'phase', 'single'] as $code) {
+            $sections[$code] = MonitoringSection::query()->create([
+                'code' => $code, 'name' => $code, 'environment' => 'clean_room',
+                'sub_environment' => 's1', 'is_active' => true,
+            ]);
+        }
+        $existing = MicrobiologicalCheck::query()->create([
+            'monitoring_section_id' => $sections['existing']->id, 'sampling_session_id' => $session->id,
+            'sampled_on' => '2026-11-19', 'created_by_user_id' => $operator->id,
+        ]);
+        $header = [
+            'sampling_session_id' => $session->id, 'environment' => 'clean_room', 'sub_environment' => 's1',
+            'sampled_on' => '2026-11-19', 'product_batch' => 'LOT-123',
+        ];
+
+        $this->actingAs($operator)->put(route('monitoraggi.sessions.update', $session), $header)
+            ->assertSessionHasNoErrors();
+        $this->assertSame('LOT-123', $session->fresh()->header['product_batch']);
+        $this->assertSame('LOT-123', $existing->fresh()->product_batch);
+        $this->get(route('monitoraggi.index', [
+            'view' => 'nuovo', 'env' => 'clean_room', 'sub' => 's1', 'session' => $session->id,
+        ]))->assertOk()->assertSee('id="session_product_batch" type="text" name="product_batch" value="LOT-123"', false);
+
+        $this->put(route('monitoraggi.sessions.update', $session), array_merge($header, [
+            'product_batch' => str_repeat('x', 121),
+        ]))->assertSessionHasErrors('product_batch');
+        $this->assertSame('LOT-123', $session->fresh()->header['product_batch']);
+
+        $this->post(route('monitoraggi.checks.store', $sections['single']), [
+            'sampling_session_id' => $session->id, 'entry_phase' => 'sampling',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('LOT-123', $sections['single']->checks()->firstOrFail()->product_batch);
+
+        $this->post(route('monitoraggi.sessions.phase.update', $session), [
+            'entry_phase' => 'sampling',
+            'checks' => [
+                $sections['existing']->id => [],
+                $sections['phase']->id => [],
+                $sections['single']->id => [],
+            ],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('LOT-123', $sections['phase']->checks()->firstOrFail()->product_batch);
     }
 
     public function test_water_operator_sees_only_analyses_enabled_for_each_point(): void

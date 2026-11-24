@@ -27,6 +27,8 @@ class MicrobiologicalCheck extends Model
         'first_reading_on',
         'second_reading_on',
         'operator_name',
+        'sampled_operator_id',
+        'operator_uniform',
         'sampling_completed_signature',
         'first_reading_completed_signature',
         'second_reading_completed_signature',
@@ -89,6 +91,14 @@ class MicrobiologicalCheck extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /**
+     * @return BelongsTo<SamplingOperator, MicrobiologicalCheck>
+     */
+    public function sampledOperator(): BelongsTo
+    {
+        return $this->belongsTo(SamplingOperator::class, 'sampled_operator_id');
     }
 
     /**

@@ -269,6 +269,17 @@
             padding: 16px;
         }
 
+        .operator-section-panel {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--panel);
+            box-shadow: 0 8px 18px rgba(31, 42, 48, 0.07);
+        }
+
+        .operator-section-panel[hidden] {
+            display: none;
+        }
+
         .department-image {
             margin: 0 0 16px;
             border: 1px solid var(--line);
@@ -296,6 +307,37 @@
             grid-template-columns: repeat(4, minmax(140px, 1fr));
             gap: 10px;
             margin-bottom: 14px;
+        }
+
+        .operator-session-form {
+            display: grid;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .operator-session-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .operator-session-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+            padding: 10px 12px;
+            border: 1px solid #b8d2cb;
+            background: #eef9f8;
+            border-radius: 8px;
+        }
+
+        .operator-session-strip .field label {
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .operator-reading-table table {
+            min-width: 0;
         }
 
         .session-water-media-grid {
@@ -1032,6 +1074,8 @@
 
         @media (max-width: 920px) {
             .meta-grid,
+            .operator-session-fields,
+            .operator-session-strip,
             .creator-grid,
             .department-grid,
             .trend-grid,
@@ -1150,13 +1194,45 @@
     </header>
 
     <section class="section-list">
-        @if ($currentView === 'nuovo' && auth()->user()?->isOperatore())
-            @php
-                $sessionHeader = $samplingSession?->header ?? [];
-            @endphp
+        @php
+            $entrySections = $filteredSections;
+            $sessionHeader = $samplingSession?->header ?? [];
+            $operatorSections = $filteredSections;
+            $storedOperatorSectionId = data_get($sessionHeader, 'operator_section', $editingCheck?->monitoring_section_id);
+            $operatorSectionId = (int) request()->query('operator_section', $storedOperatorSectionId ?? $operatorSections->first()?->id ?? 0);
+            if ($samplingSessionHeaderLocked && $storedOperatorSectionId) {
+                $operatorSectionId = (int) $storedOperatorSectionId;
+            }
+            if (! $filteredSections->contains('id', $operatorSectionId)) {
+                $operatorSectionId = (int) ($operatorSections->first()?->id ?? 0);
+            }
+            $entrySections = $currentEnvironment === 'operatori'
+                ? $operatorSections->where('id', $operatorSectionId)->values()
+                : $filteredSections;
+            $sessionPhaseHasEditableSections = $entrySections->contains(function ($section) use ($productionPhase, $sessionChecksBySection): bool {
+                $maximumReadings = max(1, (int) $section->departments->max('readings_count'));
+                $readingNumber = preg_match('/^reading_([1-9][0-9]*)$/', $productionPhase, $matches)
+                    ? (int) $matches[1]
+                    : null;
+
+                if ($readingNumber && $readingNumber > $maximumReadings) {
+                    return false;
+                }
+
+                $sectionCheck = $sessionChecksBySection->get($section->id);
+                $phaseState = $sectionCheck?->phaseStates->firstWhere('phase', $productionPhase);
+                $phaseSigned = filled($phaseState?->signed_by_user_id);
+                $phaseLocked = $sectionCheck
+                    && $phaseSigned
+                    && (! filled($phaseState?->reopened_at) || (int) $phaseState?->signed_by_user_id !== (int) auth()->id());
+
+                return ! $phaseLocked;
+            });
+        @endphp
+        @if ($currentView === 'nuovo' && auth()->user()?->isOperatore() && $currentEnvironment !== 'operatori')
             <article class="archive-card">
-                <h2 class="section-title" style="margin-bottom: 8px;">Intestazione sessione</h2>
-                <p class="hint">Questi dati saranno applicati a tutte le sezioni dell'ambiente {{ $environmentLabels[$currentEnvironment] ?? $currentEnvironment }}.</p>
+                    <h2 class="section-title" style="margin-bottom: 8px;">Intestazione sessione</h2>
+                    <p class="hint">Questi dati saranno applicati a tutte le sezioni dell'ambiente {{ $environmentLabels[$currentEnvironment] ?? $currentEnvironment }}.</p>
                 <form action="{{ route('monitoraggi.sessions.update', $samplingSessionId) }}" method="POST" class="meta-grid" style="margin-top: 12px;">
                     @csrf
                     @method('PUT')
@@ -1164,34 +1240,37 @@
                     <input type="hidden" name="environment" value="{{ $currentEnvironment }}">
                     <input type="hidden" name="sub_environment" value="{{ $currentSubEnvironment }}">
                     <fieldset @disabled($samplingSessionHeaderLocked) style="display: contents;">
-                    <div class="field"><label for="session_sampled_on">Data prelievo</label><input id="session_sampled_on" type="date" name="sampled_on" value="{{ old('sampled_on', data_get($sessionHeader, 'sampled_on', now()->toDateString())) }}" required></div>
-                    <div class="field"><label for="session_incubation_started_on">Inizio incubazione</label><input id="session_incubation_started_on" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', data_get($sessionHeader, 'incubation_started_on')) }}"></div>
-                    <div class="field"><label for="session_operator_name">Firma campionatore</label><input id="session_operator_name" type="text" name="operator_name" value="{{ old('operator_name', data_get($sessionHeader, 'operator_name', auth()->user()?->name)) }}" maxlength="120"></div>
-                    <div class="field"><label for="session_cq_operator_name">Operatore CQ</label><input id="session_cq_operator_name" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', data_get($sessionHeader, 'cq_operator_name')) }}" maxlength="120"></div>
-                    @if ($currentEnvironment === 'acque')
-                        <div class="field"><label for="session_membrane_lot">Lotto membrana filtrante</label><input id="session_membrane_lot" type="text" name="membrane_lot" value="{{ old('membrane_lot', data_get($sessionHeader, 'membrane_lot')) }}" maxlength="120"></div>
-                        <div class="field"><label for="session_bottle_sterilization_lot">Lotto sterilizzazione</label><input id="session_bottle_sterilization_lot" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', data_get($sessionHeader, 'bottle_sterilization_lot')) }}" maxlength="120"></div>
-                        <div class="session-water-media-grid">
-                            @foreach ([
-                                ['r2a_agar_lot', 'Lotto R2A', 'text'],
-                                ['r2a_agar_expires_on', 'Scadenza R2A', 'date'],
-                                ['coliform_agar_lot', 'Lotto Chr. coliform agar', 'text'],
-                                ['coliform_agar_expires_on', 'Scadenza Chr. coliform agar', 'date'],
-                                ['pseudomonas_cn_lot', 'Lotto Pseudomonas CN', 'text'],
-                                ['pseudomonas_cn_expires_on', 'Scadenza Pseudomonas CN', 'date'],
-                                ['slanetz_bartley_lot', 'Lotto Slanetz Bartley', 'text'],
-                                ['slanetz_bartley_expires_on', 'Scadenza Slanetz Bartley', 'date'],
-                            ] as [$field, $label, $type])
-                                <div class="field"><label for="session_{{ $field }}">{{ $label }}</label><input id="session_{{ $field }}" type="{{ $type }}" name="{{ $field }}" value="{{ old($field, data_get($sessionHeader, $field)) }}" @if ($type === 'text') maxlength="120" @endif></div>
-                            @endforeach
-                        </div>
-                    @else
-                        <div class="field"><label for="session_media_lot">Lotto piastre</label><input id="session_media_lot" type="text" name="media_lot" value="{{ old('media_lot', data_get($sessionHeader, 'media_lot')) }}" maxlength="120"></div>
-                        <div class="field"><label for="session_swab_lot">Lotto provette/swab</label><input id="session_swab_lot" type="text" name="swab_lot" value="{{ old('swab_lot', data_get($sessionHeader, 'swab_lot')) }}" maxlength="120"></div>
-                    @endif
-                    @if (! $samplingSessionHeaderLocked)
-                        <div class="field" style="align-self:end;"><button type="submit">Salva intestazione</button></div>
-                    @endif
+                            <div class="field"><label for="session_sampled_on">Data prelievo</label><input id="session_sampled_on" type="date" name="sampled_on" value="{{ old('sampled_on', data_get($sessionHeader, 'sampled_on', now()->toDateString())) }}" required></div>
+                            <div class="field"><label for="session_incubation_started_on">Inizio incubazione</label><input id="session_incubation_started_on" type="date" name="incubation_started_on" value="{{ old('incubation_started_on', data_get($sessionHeader, 'incubation_started_on')) }}"></div>
+                            <div class="field"><label for="session_operator_name">Firma campionatore</label><input id="session_operator_name" type="text" name="operator_name" value="{{ old('operator_name', data_get($sessionHeader, 'operator_name', auth()->user()?->name)) }}" maxlength="120"></div>
+                            <div class="field"><label for="session_cq_operator_name">Operatore CQ</label><input id="session_cq_operator_name" type="text" name="cq_operator_name" value="{{ old('cq_operator_name', data_get($sessionHeader, 'cq_operator_name')) }}" maxlength="120"></div>
+                            @if ($currentEnvironment === 'acque')
+                                <div class="field"><label for="session_membrane_lot">Lotto membrana filtrante</label><input id="session_membrane_lot" type="text" name="membrane_lot" value="{{ old('membrane_lot', data_get($sessionHeader, 'membrane_lot')) }}" maxlength="120"></div>
+                                <div class="field"><label for="session_bottle_sterilization_lot">Lotto sterilizzazione</label><input id="session_bottle_sterilization_lot" type="text" name="bottle_sterilization_lot" value="{{ old('bottle_sterilization_lot', data_get($sessionHeader, 'bottle_sterilization_lot')) }}" maxlength="120"></div>
+                                <div class="session-water-media-grid">
+                                    @foreach ([
+                                        ['r2a_agar_lot', 'Lotto R2A', 'text'],
+                                        ['r2a_agar_expires_on', 'Scadenza R2A', 'date'],
+                                        ['coliform_agar_lot', 'Lotto Chr. coliform agar', 'text'],
+                                        ['coliform_agar_expires_on', 'Scadenza Chr. coliform agar', 'date'],
+                                        ['pseudomonas_cn_lot', 'Lotto Pseudomonas CN', 'text'],
+                                        ['pseudomonas_cn_expires_on', 'Scadenza Pseudomonas CN', 'date'],
+                                        ['slanetz_bartley_lot', 'Lotto Slanetz Bartley', 'text'],
+                                        ['slanetz_bartley_expires_on', 'Scadenza Slanetz Bartley', 'date'],
+                                    ] as [$field, $label, $type])
+                                        <div class="field"><label for="session_{{ $field }}">{{ $label }}</label><input id="session_{{ $field }}" type="{{ $type }}" name="{{ $field }}" value="{{ old($field, data_get($sessionHeader, $field)) }}" @if ($type === 'text') maxlength="120" @endif></div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="field"><label for="session_media_lot">Lotto piastre</label><input id="session_media_lot" type="text" name="media_lot" value="{{ old('media_lot', data_get($sessionHeader, 'media_lot')) }}" maxlength="120"></div>
+                                <div class="field"><label for="session_swab_lot">Lotto provette/swab</label><input id="session_swab_lot" type="text" name="swab_lot" value="{{ old('swab_lot', data_get($sessionHeader, 'swab_lot')) }}" maxlength="120"></div>
+                                @if ($currentEnvironment === 'clean_room')
+                                    <div class="field"><label for="session_product_batch">Lotto prodotto</label><input id="session_product_batch" type="text" name="product_batch" value="{{ old('product_batch', data_get($sessionHeader, 'product_batch')) }}" maxlength="120"></div>
+                                @endif
+                            @endif
+                        @if (! $samplingSessionHeaderLocked)
+                            <div class="field" style="align-self:end;"><button type="submit">Salva intestazione</button></div>
+                        @endif
                     </fieldset>
                 </form>
                 @if ($samplingSessionHeaderLocked)
@@ -1260,13 +1339,15 @@
                         <div class="archive-date-group">
                             <div class="archive-date-head">
                                 <h3 class="archive-date-title">{{ \Carbon\Carbon::parse($dateChecks->max('sampled_on'))->format('d-m-Y') }}</h3>
-                                <span class="hint">{{ $dateChecks->count() }} sezioni campionate · {{ $dateChecks->sum('point_results_count') }} punti compilati</span>
+                                <span class="hint">{{ $dateChecks->count() }} {{ $currentEnvironment === 'operatori' ? 'registrazioni' : 'sezioni campionate' }} · {{ $dateChecks->sum('point_results_count') }} punti compilati</span>
                             </div>
 
                             @php
                                 $dateSessions = $currentEnvironment === 'acque'
                                     ? collect([$dateChecks])
-                                    : $dateChecks->groupBy(fn ($check) => $check->sampling_session_id ?: 'legacy-'.$check->id);
+                                    : ($currentEnvironment === 'operatori'
+                                        ? $dateChecks->groupBy('id')
+                                        : $dateChecks->groupBy(fn ($check) => $check->sampling_session_id ?: 'legacy-'.$check->id));
                             @endphp
                             @foreach ($dateSessions as $sessionChecks)
 
@@ -1286,11 +1367,15 @@
                                 @endphp
                                 <div class="archive-item archive-item-sampled" style="margin-top:8px;">
                                     <div class="archive-item-head">
-                                        <strong>{{ $sessionCheck->sampling_session_id ? 'Sessione di campionamento' : 'Campionamento storico' }}</strong>
+                                        <strong>{{ $currentEnvironment === 'operatori'
+                                            ? 'Registrazione reparto'
+                                            : ($sessionCheck->sampling_session_id ? 'Sessione di campionamento' : 'Campionamento storico') }}</strong>
                                         <span class="badge">{{ $sessionChecks->sum('point_results_count') }} punti compilati</span>
                                         <span class="archive-phase-status {{ $phaseStatus[0] }}">{{ $phaseStatus[1] }}</span>
                                     </div>
-                                    <span class="hint">{{ $sessionCheck->sampling_session_id ? 'ID sessione: '.$sessionCheck->sampling_session_id : 'ID campionamento: '.$sessionCheck->id }}</span>
+                                    <span class="hint">{{ $currentEnvironment === 'operatori'
+                                        ? 'ID registrazione: '.$sessionCheck->id
+                                            : ($sessionCheck->sampling_session_id ? 'ID sessione: '.$sessionCheck->sampling_session_id : 'ID campionamento: '.$sessionCheck->id) }}</span>
                                     <div class="archive-section-tags">
                                         @foreach ($sessionChecks as $sectionCheck)
                                             <span class="archive-section-tag">{{ $sectionCheck->section?->name ?? 'Sezione rimossa' }}: {{ $sectionCheck->point_results_count }} punti</span>
@@ -1299,7 +1384,7 @@
                                     <span class="hint">Operatore: {{ $sessionCheck->operator_name ?: ($sessionCheck->author?->name ?: '-') }}</span>
                                     <span class="hint">Salvato il: {{ $sessionChecks->max('created_at')?->format('d-m-Y H:i') ?: '-' }}</span>
                                     @if (! $sessionCheck->trashed())
-                                        <a class="archive-edit-button" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $sessionCheck->id, 'session' => $sessionCheck->sampling_session_id])) }}">Apri in modifica</a>
+                                        <a class="archive-edit-button" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'sub' => $currentSubEnvironment, 'edit_check' => $sessionCheck->id, 'session' => $sessionCheck->sampling_session_id, 'operator_section' => $currentEnvironment === 'operatori' ? $sessionCheck->monitoring_section_id : null])) }}">Apri in modifica</a>
                                     @endif
                                 </div>
                             @else
@@ -1614,7 +1699,7 @@
                     </form>
 
                     <div class="department-table">
-                        @forelse ($filteredSections as $section)
+                        @forelse ($entrySections as $section)
                             <form class="department-row" action="{{ route('monitoraggi.sections.update', $section) }}" method="POST" enctype="multipart/form-data">
                                 @csrf
                                 @method('PATCH')
@@ -1783,31 +1868,13 @@
         @endif
 
         @if ($currentView === 'nuovo' || $currentView === 'gestione-punti')
-            @if (auth()->user()?->isOperatore() && $currentView === 'nuovo' && in_array($currentEnvironment, ['produzione', 'operatori', 'clean_room'], true) && $samplingSession)
-                @php
-                    $sessionPhaseHasEditableSections = $filteredSections->contains(function ($section) use ($productionPhase, $sessionChecksBySection): bool {
-                        $maximumReadings = max(1, (int) $section->departments->max('readings_count'));
-                        $readingNumber = preg_match('/^reading_([1-9][0-9]*)$/', $productionPhase, $matches)
-                            ? (int) $matches[1]
-                            : null;
-
-                        if ($readingNumber && $readingNumber > $maximumReadings) {
-                            return false;
-                        }
-
-                        $sectionCheck = $sessionChecksBySection->get($section->id);
-                        $phaseState = $sectionCheck?->phaseStates->firstWhere('phase', $productionPhase);
-                        $phaseSigned = filled($phaseState?->signed_by_user_id);
-                        $phaseLocked = $sectionCheck
-                            && $phaseSigned
-                            && (! filled($phaseState?->reopened_at) || (int) $phaseState?->signed_by_user_id !== (int) auth()->id());
-
-                        return ! $phaseLocked;
-                    });
-                @endphp
-                <form id="save-session-phase" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form data-session-has-editable-sections="{{ $sessionPhaseHasEditableSections ? 'true' : 'false' }}">
+            @if (auth()->user()?->isOperatore() && $currentView === 'nuovo' && in_array($currentEnvironment, ['produzione', 'clean_room'], true) && $samplingSession)
+                <form id="session-phase-actions" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form data-session-has-editable-sections="{{ $sessionPhaseHasEditableSections ? 'true' : 'false' }}">
                     @csrf
                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
+                    @if ($currentEnvironment === 'operatori')
+                        <input type="hidden" name="operator_section" value="{{ $operatorSectionId }}">
+                    @endif
                     <p class="hint">Salvataggio unico della fase per tutti i reparti della sessione.</p>
                     <div class="field" data-session-reopen-reason hidden>
                         <label for="session_reopening_reason">Motivazione riapertura</label>
@@ -1835,6 +1902,9 @@
 
                     if ($unassignedPoints->isNotEmpty()) {
                         $groupedPoints->put('Senza tipo di campionamento', $unassignedPoints);
+                    }
+                    if ($currentView === 'nuovo' && $currentEnvironment === 'operatori') {
+                        $groupedPoints = collect(['Punti' => $groupedPoints->collapse()]);
                     }
                     $sectionMaximumReadings = max(1, (int) $section->departments->max('readings_count'));
                     $sectionProductionPhases = ['sampling' => 'Fase campionamento'];
@@ -1875,20 +1945,42 @@
                             ->join('')
                         : null;
                     $productionPhaseLocked = $isEditingSection && $phaseSigned && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id());
+                    $isOperatorSectionPicker = $currentView === 'nuovo' && $currentEnvironment === 'operatori';
                 @endphp
-                <details class="section" @if($isEditingSection) open @endif>
-                    <summary>
-                        <div>
-                            <p class="section-title">{{ $section->name }}</p>
-                            <p class="section-desc">{{ $section->description }}</p>
-                        </div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-                            <span class="badge soft">{{ $section->departments->count() }} reparti</span>
-                            <span class="badge">{{ $section->samplingPoints->count() }} punti</span>
-                        </div>
-                    </summary>
+                @if ($isOperatorSectionPicker)
+                    <div class="operator-section-panel" data-operator-section-panel="{{ $section->id }}" @if ($operatorSectionId !== (int) $section->id) hidden @endif>
+                @else
+                    <details class="section" @if($isEditingSection) open @endif>
+                        <summary>
+                            <div>
+                                <p class="section-title">{{ $section->name }}</p>
+                                <p class="section-desc">{{ $section->description }}</p>
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                                <span class="badge soft">{{ $section->departments->count() }} reparti</span>
+                                <span class="badge">{{ $section->samplingPoints->count() }} punti</span>
+                            </div>
+                        </summary>
+                @endif
 
                     <div class="section-body">
+                        @if ($isOperatorSectionPicker)
+                            @include('monitoraggi.partials.operator-session-header')
+                        @endif
+
+                        @if ($isOperatorSectionPicker)
+                            <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
+                                @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
+                                    @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
+                                    @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
+                                        <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $sectionCheck->id : null, 'session' => $samplingSessionId, 'operator_section' => $section->id])) }}">{{ $phaseLabel }}</a>
+                                    @else
+                                        <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
+                                    @endif
+                                @endforeach
+                            </div>
+                        @endif
+
                         @if ($currentView === 'nuovo' && auth()->user()?->isOperatore() && in_array($currentEnvironment, ['produzione', 'clean_room', 'acque'], true) && $section->image_path)
                             <details class="department-image">
                                 <summary>{{ $currentEnvironment === 'produzione' ? 'Visualizza foto reparto' : ($currentEnvironment === 'clean_room' ? 'Visualizza foto clean room' : 'Visualizza foto sezione acque') }}</summary>
@@ -2247,10 +2339,13 @@
                                 @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                     <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
                                 @endif
+                                @if ($currentEnvironment === 'operatori')
+                                    <input type="hidden" name="notes" value="">
+                                @endif
 
                                 @if ($currentEnvironment === 'acque')
                                     @include('monitoraggi.partials.water-sampling-sheet')
-                                @else
+                                @elseif ($currentEnvironment !== 'operatori')
                                 <div class="meta-grid">
                                     <div class="field">
                                         <label for="sampled_on_{{ $section->id }}">Data prelievo</label>
@@ -2442,12 +2537,12 @@
                                         @endforeach
                                     </div>
                                 @else
-                                @if (in_array($currentEnvironment, ['produzione', 'operatori'], true))
+                                @if ($currentEnvironment === 'produzione')
                                     <div class="env-switch production-phase-switch" aria-label="Fase di inserimento">
                                         @foreach ($sectionProductionPhases as $phaseKey => $phaseLabel)
                                             @php($previousPhaseKey = $phaseKey === 'sampling' ? null : ($phaseKey === 'reading_1' ? 'sampling' : 'reading_'.((int) str_replace('reading_', '', $phaseKey) - 1)))
                                             @if (! $previousPhaseKey || filled($phaseStates->get($previousPhaseKey)?->signed_by_user_id))
-                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $sectionCheck->id : null, 'session' => $samplingSessionId])) }}">{{ $phaseLabel }}</a>
+                                                <a class="env-link @if ($productionPhase === $phaseKey) active @endif" href="{{ route('monitoraggi.index', array_filter(['view' => 'nuovo', 'env' => $currentEnvironment, 'phase' => $phaseKey, 'edit_check' => $isEditingSection ? $sectionCheck->id : null, 'session' => $samplingSessionId, 'operator_section' => $currentEnvironment === 'operatori' ? $section->id : null])) }}">{{ $phaseLabel }}</a>
                                             @else
                                                 <span class="env-link" aria-disabled="true">{{ $phaseLabel }}</span>
                                             @endif
@@ -2455,10 +2550,11 @@
                                     </div>
                                 @endif
 
-                                @if ($currentReadingNumber && $groupedPoints->isEmpty())
+                                @if ($currentEnvironment === 'operatori' && $productionPhase === 'sampling')
+                                @elseif ($currentReadingNumber && $groupedPoints->isEmpty())
                                     <p class="hint">Non risultano campionamenti effettuati.</p>
                                 @else
-                                <div class="table-scroll @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif">
+                                <div class="table-scroll @if ($currentEnvironment === 'operatori') operator-reading-table @endif @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif">
                                     <table>
                                         <thead>
                                         @if ($currentEnvironment === 'acque')
@@ -2484,6 +2580,11 @@
                                                 <th>UFC/piastra</th>
                                                 <th>UFC confermate</th>
                                                 <th>UFC/100 ml</th>
+                                            </tr>
+                                        @elseif ($currentEnvironment === 'operatori')
+                                            <tr>
+                                                <th>Punto</th>
+                                                <th>UFC Piastra {{ $currentReadingNumber }}a Lettura</th>
                                             </tr>
                                         @elseif (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                             <tr>
@@ -2585,6 +2686,13 @@
                                                                 <option value="non_conforme" @selected(old("points.{$point->id}.final_result", data_get($editingPointResults->get($point->id), 'final_result')) === 'non_conforme')>Non conforme</option>
                                                             </select>
                                                         </td>
+                                                    @elseif ($currentEnvironment === 'operatori')
+                                                        <td>{{ $point->title }} ({{ $loop->iteration }})</td>
+                                                        @php($pointResult = $editingPointResults->get($point->id))
+                                                        @php($pointReading = $currentReadingNumber && $pointResult ? $pointResult->readings->firstWhere('reading_number', $currentReadingNumber) : null)
+                                                        <td>
+                                                            <input type="number" min="0" name="points[{{ $point->id }}][reading_cfu_count]" value="{{ old("points.{$point->id}.reading_cfu_count", $pointReading?->cfu_count) }}">
+                                                        </td>
                                                     @elseif (in_array($currentEnvironment, ['produzione', 'operatori'], true))
                                                         <td>{{ $point->legacy_code ?: '-' }}</td>
                                                         <td>
@@ -2684,10 +2792,12 @@
                                 @endif
                                 @endif
 
-                                <div class="field @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
-                                    <label for="notes_{{ $section->id }}">Note sezione</label>
-                                    <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $sectionCheck->notes : null) }}</textarea>
-                                </div>
+                                @if ($currentEnvironment !== 'operatori')
+                                    <div class="field @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked) production-phase-locked @endif" style="margin-top: 12px;" @if ($currentEnvironment === 'acque') data-water-step-content="results" @endif>
+                                        <label for="notes_{{ $section->id }}">Note sezione</label>
+                                        <textarea id="notes_{{ $section->id }}" name="notes">{{ old('notes', $isEditingSection ? $sectionCheck->notes : null) }}</textarea>
+                                    </div>
+                                @endif
 
                                 @if (in_array($currentEnvironment, ['produzione', 'operatori'], true) && $productionPhaseLocked)
                                     <p class="hint" style="margin-top: 12px;">Questa fase e firmata e bloccata.{{ $productionPhaseReopenable ? ' Usa il comando di riapertura in alto.' : " Solo l'operatore che l'ha firmata puo riaprirla." }}</p>
@@ -2704,13 +2814,32 @@
                                     </div>
                                 @endif
                             </form>
+                            @if ($isOperatorSectionPicker && $section->id === $operatorSectionId && $samplingSession && $sectionSupportsProductionPhase)
+                                <form id="session-phase-actions" action="{{ route('monitoraggi.sessions.phase.update', $samplingSession) }}" method="POST" class="actions session-phase-actions" data-session-phase-form data-session-has-editable-sections="{{ $sessionPhaseHasEditableSections ? 'true' : 'false' }}">
+                                    @csrf
+                                    <input type="hidden" name="entry_phase" value="{{ $productionPhase }}">
+                                    <input type="hidden" name="operator_section" value="{{ $operatorSectionId }}">
+                                    <p class="hint">Salvataggio della fase per il reparto selezionato.</p>
+                                    <div class="field" data-session-reopen-reason hidden>
+                                        <label for="session_reopening_reason">Motivazione riapertura</label>
+                                        <textarea id="session_reopening_reason" name="reopening_reason" maxlength="1000"></textarea>
+                                    </div>
+                                    <button type="submit" data-session-save>Salva {{ $productionPhases[$productionPhase] }}</button>
+                                    <button type="submit" name="sign_phase" value="1" data-session-sign>Firma {{ $productionPhases[$productionPhase] }}</button>
+                                    <button type="submit" name="reopen_phase" value="1" data-session-reopen hidden>Riapri {{ $productionPhases[$productionPhase] }}</button>
+                                </form>
+                            @endif
                         @elseif ($currentView === 'nuovo')
                             <div class="actions" style="margin-top:12px;">
                                 <p class="hint">La compilazione del campionamento e consentita solo agli utenti con ruolo operatore.</p>
                             </div>
                         @endif
                     </div>
-                </details>
+                @if ($isOperatorSectionPicker)
+                    </div>
+                @else
+                    </details>
+                @endif
             @empty
                 <details class="section" open>
                     <summary>
@@ -2728,6 +2857,18 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var operatorSectionSelect = document.querySelector('[data-operator-section-select]');
+
+        if (operatorSectionSelect) {
+            operatorSectionSelect.addEventListener('change', function () {
+                var url = new URL(window.location.href);
+                url.searchParams.set('operator_section', operatorSectionSelect.value);
+                url.searchParams.set('session', operatorSectionSelect.dataset.sessionId);
+                url.searchParams.delete('edit_check');
+                window.location.assign(url.toString());
+            });
+        }
+
         var sessionPhaseForm = document.querySelector('[data-session-phase-form]');
 
         if (sessionPhaseForm) {
@@ -2749,7 +2890,9 @@
             }
 
             if (! editableSectionForms.length && ! reopenableSectionForms.length) {
-                sessionPhaseForm.querySelector('.hint').textContent = 'La fase selezionata è già firmata per tutte le sezioni. Non hai sezioni che puoi riaprire.';
+                sessionPhaseForm.querySelector('.hint').textContent = sessionPhaseForm.querySelector('input[name="operator_section"]')
+                    ? 'La fase selezionata è già firmata per questo reparto. Non hai un reparto che puoi riaprire.'
+                    : 'La fase selezionata è già firmata per tutte le sezioni. Non hai sezioni che puoi riaprire.';
             }
 
             sessionPhaseForm.addEventListener('submit', function (event) {
