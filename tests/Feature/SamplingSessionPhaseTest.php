@@ -273,6 +273,24 @@ class SamplingSessionPhaseTest extends TestCase
             ->assertDontSee('id="session_membrane_lot"', false);
     }
 
+    public function test_admin_can_open_operator_environment_without_a_sampling_session(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        MonitoringSection::query()->create([
+            'code' => 'operatori_slide',
+            'name' => 'Operatori - Slide',
+            'environment' => 'operatori',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('monitoraggi.index', ['env' => 'operatori']))
+            ->assertOk()
+            ->assertSee('Operatori - Slide')
+            ->assertDontSee('class="operator-session-form"', false)
+            ->assertSee('La compilazione del campionamento e consentita solo agli utenti con ruolo operatore.');
+    }
+
     public function test_operator_sampling_uses_one_section_picker_and_saves_operator_details(): void
     {
         $operator = User::factory()->create(['role' => 'operatore']);

@@ -1945,7 +1945,7 @@
                             ->join('')
                         : null;
                     $productionPhaseLocked = $isEditingSection && $phaseSigned && (! filled($phaseReopenedAt) || (int) $phaseSignerId !== (int) auth()->id());
-                    $isOperatorSectionPicker = $currentView === 'nuovo' && $currentEnvironment === 'operatori';
+                    $isOperatorSectionPicker = $currentView === 'nuovo' && $currentEnvironment === 'operatori' && auth()->user()?->isOperatore();
                 @endphp
                 @if ($isOperatorSectionPicker)
                     <div class="operator-section-panel" data-operator-section-panel="{{ $section->id }}" @if ($operatorSectionId !== (int) $section->id) hidden @endif>
